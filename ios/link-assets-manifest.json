@@ -1,0 +1,57 @@
+{
+  "migIndex": 1,
+  "data": [
+    {
+      "path": "main/src/assets/fonts/helvetica-bold.ttf",
+      "sha1": "06fa37b6051d8449723c36199449b7b38b5f0386"
+    },
+    {
+      "path": "main/src/assets/fonts/helvetica.ttf",
+      "sha1": "ae47e7f6d7b78f01e408750cfc032e4330324373"
+    },
+    {
+      "path": "main/src/assets/fonts/LatoBold.ttf",
+      "sha1": "d67fee08c79a82ce375ab9629ae5a903da8bb321"
+    },
+    {
+      "path": "main/src/assets/fonts/LatoLight.ttf",
+      "sha1": "e0132feb514feb3cdb745d479c71dee62ad37757"
+    },
+    {
+      "path": "main/src/assets/fonts/LatoRegular.ttf",
+      "sha1": "83dc5921761a7c3d1ee7badba3fc7e1e1f5ed803"
+    },
+    {
+      "path": "main/src/assets/fonts/OpenSansBold.ttf",
+      "sha1": "b9b65c039a1f10a5cb5e0726c6e7e18e98a8e517"
+    },
+    {
+      "path": "main/src/assets/fonts/OpenSansCondensedBold.ttf",
+      "sha1": "afe9e5a50abb8d3dcaca605d0e278d16258806f0"
+    },
+    {
+      "path": "main/src/assets/fonts/OpenSansCondensedLight.ttf",
+      "sha1": "ff94aff6ae5feb5c9042ccdd44e9e1c5e04645f9"
+    },
+    {
+      "path": "main/src/assets/fonts/OpenSansLight.ttf",
+      "sha1": "bf0d133b628259eca01049d30fa6316094d00bcf"
+    },
+    {
+      "path": "main/src/assets/fonts/OpenSansRegular.ttf",
+      "sha1": "01d319c533f62ea29f03b5df8adfd4d93d2d2a38"
+    },
+    {
+      "path": "main/src/assets/fonts/OpenSansSemiBold.ttf",
+      "sha1": "e256f8391718ef61f253dfb4e95bbeb3c5857afc"
+    },
+    {
+      "path": "main/src/assets/fonts/Poppins-Bold.ttf",
+      "sha1": "b9b65c039a1f10a5cb5e0726c6e7e18e98a8e517"
+    },
+    {
+      "path": "main/src/assets/fonts/Poppins-Regular.ttf",
+      "sha1": "01d319c533f62ea29f03b5df8adfd4d93d2d2a38"
+    }
+  ]
+}
