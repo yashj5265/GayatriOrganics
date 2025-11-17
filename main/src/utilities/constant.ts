@@ -5,25 +5,25 @@ export default {
     envirolment: "",
     apiEndPoints: {
         // Auth - User OTP Flow
-        sendOTP: 'api/user/send-otp',
-        verifyOTP: 'api/user/verify-otp',
-        logout: 'api/user/logout',
+        sendOTP: '/api/send-otp',
+        verifyOTP: '/api/verify-otp',
+        logout: '/api/logout',
 
         // User Registration (for future)
-        register: 'api/user/register',
+        register: '/api/user/register',
 
         // Category
-        allCategories: 'api/user/categories',
-        getCategory: 'api/user/category',
+        allCategories: '/api/admin/categories',
+        getCategory: '/api/admin/category',
 
         // Product
-        allProducts: 'api/user/products',
-        getProduct: 'api/user/product',
+        allProducts: '/api/admin/products',//Get
+        getProduct: '/api/admin/product/',//Get
 
         // Orders (for future)
-        createOrder: 'api/user/order',
-        myOrders: 'api/user/orders',
-        getOrder: 'api/user/order',
+        createOrder: '/api/user/order',
+        myOrders: '/api/user/orders',
+        getOrder: '/api/user/order',
     },
     shareInstanceKey: {
         authToken: StorageKey.TOKEN,
@@ -53,6 +53,9 @@ export default {
         cart: 'cart',
         orders: 'orders',
         profile: 'profile',
+        categoryDetail: "categoryDetail",
+        productDetail: "productDetail",
+        mainTabs: "mainTabs"
     },
     // Response Codes
     responseCode: {

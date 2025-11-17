@@ -65,6 +65,69 @@ const VerifyOTPScreen: React.FC<Props> = ({ navigation, route }) => {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
+    // const handleVerifyOTP = async () => {
+    //     if (!otp || otp.length !== 4) {
+    //         Alert.alert('Validation Error', 'Please enter 4-digit OTP');
+    //         return;
+    //     }
+
+    //     setLoading(true);
+
+    //     try {
+    //         console.log('🔐 Verifying OTP for:', mobile);
+
+    //         const response: VerifyOTPResponse = await ApiManager.post({
+    //             endpoint: constant.apiEndPoints.verifyOTP,
+    //             params: {
+    //                 mobile: mobile,
+    //                 otp: parseInt(otp),
+    //             },
+    //         });
+
+    //         console.log('✅ Verify OTP Response:', response);
+
+    //         if (response?.success || response?.token) {
+    //             const token = response?.token;
+
+    //             if (!token) {
+    //                 Alert.alert('Error', 'Login failed: No authentication token received');
+    //                 setLoading(false);
+    //                 return;
+    //             }
+
+    //             const userData = response?.user;
+
+    //             // Use AuthContext login function
+    //             await login(token, userData);
+
+    //             console.log('✅ Login successful! Navigation will happen automatically.');
+
+    //             Alert.alert('Success', response?.message || 'Login successful!');
+
+    //         } else {
+    //             console.error('❌ Verify OTP failed:', response?.message);
+    //             Alert.alert(
+    //                 'Verification Failed',
+    //                 response?.message || 'Invalid OTP. Please check and try again.'
+    //             );
+    //             setLoading(false);
+    //         }
+    //     } catch (error: any) {
+    //         console.error('❌ Verify OTP error:', error);
+
+    //         let errorMessage = 'Something went wrong. Please try again.';
+
+    //         if (error.message === 'No internet connection') {
+    //             errorMessage = 'No internet connection. Please check your network and try again.';
+    //         } else if (error.message) {
+    //             errorMessage = error.message;
+    //         }
+
+    //         Alert.alert('Error', errorMessage);
+    //         setLoading(false);
+    //     }
+    // };
+
     const handleVerifyOTP = async () => {
         if (!otp || otp.length !== 4) {
             Alert.alert('Validation Error', 'Please enter 4-digit OTP');
@@ -80,22 +143,16 @@ const VerifyOTPScreen: React.FC<Props> = ({ navigation, route }) => {
                 endpoint: constant.apiEndPoints.verifyOTP,
                 params: {
                     mobile: mobile,
-                    otp: parseInt(otp),
+                    otp: otp,
                 },
             });
 
             console.log('✅ Verify OTP Response:', response);
 
-            if (response?.success || response?.token) {
-                const token = response?.token;
-
-                if (!token) {
-                    Alert.alert('Error', 'Login failed: No authentication token received');
-                    setLoading(false);
-                    return;
-                }
-
-                const userData = response?.user;
+            // Check if response has token (indicating success)
+            if (response?.token) {
+                const token = response.token;
+                const userData = response.user;
 
                 // Use AuthContext login function
                 await login(token, userData);

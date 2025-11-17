@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import MainContainer from '../../container/MainContainer';
 import { useTheme } from '../../contexts/ThemeProvider';
 import fonts from '../../styles/fonts';
@@ -8,6 +9,8 @@ import AppTouchableRipple from '../../components/AppTouchableRipple';
 import StorageManager from '../../managers/StorageManager';
 import constant from '../../utilities/constant';
 import { useCart } from '../../contexts/CardContext';
+import { ProductListScreenProps } from './ProductListScreen';
+import { ProductDetailScreenProps } from './ProductDetailScreen';
 
 interface Props {
     navigation: NativeStackNavigationProp<any>;
@@ -51,26 +54,43 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
     const handleAddToCart = (product: typeof featuredProducts[0]) => {
         if (isInCart(product.id)) {
-            // Navigate to cart if already added
-            navigation.navigate('Cart');
+            navigation.navigate(constant.routeName.cart);
         } else {
-            // Add to cart
             addToCart({
                 id: product.id,
                 name: product.name,
                 price: product.price,
                 image: product.image,
                 unit: product.unit,
+                quantity: 1
             });
             Alert.alert(
                 'Added to Cart',
                 `${product.name} has been added to your cart`,
                 [
                     { text: 'Continue Shopping', style: 'cancel' },
-                    { text: 'View Cart', onPress: () => navigation.navigate('Cart') },
+                    { text: 'View Cart', onPress: () => navigation.navigate(constant.routeName.cart) },
                 ]
             );
         }
+    };
+
+    const handleProductPress = (productId: number) => {
+        // const propsToSend: ProductDetailScreenProps = {
+        //     productId: productId
+        // };
+        // navigation.navigate(constant.routeName.productDetail, propsToSend);
+    };
+
+    const handleSearchPress = () => {
+        const propsToSend: ProductListScreenProps = {
+            focusSearch: true
+        };
+        navigation.navigate(constant.routeName.products, propsToSend);
+    };
+
+    const handleViewAllProducts = () => {
+        navigation.navigate(constant.routeName.products);
     };
 
     return (
@@ -97,7 +117,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
                         {cartCount > 0 && (
                             <AppTouchableRipple
                                 style={[styles.cartButton, { backgroundColor: colors.white }]}
-                                onPress={() => navigation.navigate('Cart')}
+                                onPress={() => navigation.navigate(constant.routeName.cart)}
                             >
                                 <Text style={styles.cartIcon}>🛒</Text>
                                 <View
@@ -114,6 +134,19 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
                         )}
                     </View>
                 </View>
+
+                {/* Search Bar - Navigate to Product List */}
+                <TouchableOpacity
+                    style={[styles.searchContainer, { backgroundColor: 'rgba(112, 209, 152, 0.2)', borderColor: colors.themePrimary }]}
+                    onPress={handleSearchPress}
+                    activeOpacity={0.7}
+                >
+                    <Icon name="magnify" size={20} color={colors.themePrimary} />
+                    <Text style={[styles.searchPlaceholder, { color: colors.themePrimary }]}>
+                        Search products, categories...
+                    </Text>
+                    <Icon name="arrow-right" size={20} color={colors.themePrimary} />
+                </TouchableOpacity>
 
                 {/* Banner */}
                 <View style={[styles.banner, { backgroundColor: colors.themePrimaryLight }]}>
@@ -142,7 +175,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                     styles.categoryCard,
                                     { backgroundColor: colors.backgroundSecondary },
                                 ]}
-                                onPress={() => navigation.navigate('Categories')}
+                                onPress={() => navigation.navigate(constant.routeName.categories)}
                             >
                                 <Text style={styles.categoryIcon}>{category.icon}</Text>
                                 <Text style={[styles.categoryName, { color: colors.textPrimary }]}>
@@ -159,10 +192,13 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
                         <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
                             Featured Products
                         </Text>
-                        <AppTouchableRipple onPress={() => navigation.navigate('Categories')}>
-                            <Text style={[styles.viewAll, { color: colors.themePrimary }]}>
-                                View All
-                            </Text>
+                        <AppTouchableRipple onPress={handleViewAllProducts}>
+                            <View style={styles.viewAllButton}>
+                                <Text style={[styles.viewAll, { color: colors.themePrimary }]}>
+                                    View All
+                                </Text>
+                                <Icon name="arrow-right" size={16} color={colors.themePrimary} />
+                            </View>
                         </AppTouchableRipple>
                     </View>
 
@@ -170,12 +206,13 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
                         {featuredProducts.map((product) => {
                             const inCart = isInCart(product.id);
                             return (
-                                <View
+                                <AppTouchableRipple
                                     key={product.id}
                                     style={[
                                         styles.productCard,
                                         { backgroundColor: colors.backgroundSecondary },
                                     ]}
+                                    onPress={() => handleProductPress(product.id)}
                                 >
                                     <Text style={styles.productImage}>{product.image}</Text>
                                     <Text
@@ -205,7 +242,10 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                                         : colors.themePrimaryLight,
                                                 },
                                             ]}
-                                            onPress={() => handleAddToCart(product)}
+                                            onPress={(e) => {
+                                                e?.stopPropagation();
+                                                handleAddToCart(product);
+                                            }}
                                         >
                                             <Text
                                                 style={[
@@ -221,7 +261,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                             </Text>
                                         </AppTouchableRipple>
                                     </View>
-                                </View>
+                                </AppTouchableRipple>
                             );
                         })}
                     </View>
@@ -268,7 +308,7 @@ const styles = StyleSheet.create({
     header: {
         paddingHorizontal: 20,
         paddingTop: 50,
-        paddingBottom: 30,
+        paddingBottom: 20,
         borderBottomLeftRadius: 24,
         borderBottomRightRadius: 24,
     },
@@ -276,6 +316,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        marginBottom: 16,
     },
     greeting: {
         fontSize: fonts.size.font16,
@@ -300,8 +341,8 @@ const styles = StyleSheet.create({
     },
     cartBadge: {
         position: 'absolute',
-        top: -2,
-        right: -2,
+        top: 5,
+        right: 5,
         minWidth: 20,
         height: 20,
         borderRadius: 10,
@@ -310,8 +351,24 @@ const styles = StyleSheet.create({
         paddingHorizontal: 6,
     },
     cartBadgeText: {
-        fontSize: fonts.size.font11,
+        fontSize: fonts.size.font10,
         fontFamily: fonts.family.primaryBold,
+    },
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        gap: 12,
+        borderWidth: 1,
+        marginTop: 10,
+        marginHorizontal: 10
+    },
+    searchPlaceholder: {
+        flex: 1,
+        fontSize: fonts.size.font15,
+        fontFamily: fonts.family.primaryRegular,
     },
     banner: {
         margin: 20,
@@ -341,6 +398,11 @@ const styles = StyleSheet.create({
     sectionTitle: {
         fontSize: fonts.size.font18,
         fontFamily: fonts.family.primaryBold,
+    },
+    viewAllButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
     },
     viewAll: {
         fontSize: fonts.size.font14,

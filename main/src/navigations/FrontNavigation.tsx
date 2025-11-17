@@ -9,12 +9,21 @@ import CartScreen from '../screens/front/CartScreen';
 import ProfileScreen from '../screens/front/ProfileScreen';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import CategoryDetailScreen from '../screens/front/CategoryDetailScreen';
+import constant from '../utilities/constant';
+import ProductListScreen from '../screens/front/ProductListScreen';
+import ProductDetailScreen from '../screens/front/ProductDetailScreen';
+import { useCart } from '../contexts/CardContext';
 
 const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
 
-const FrontNavigation: React.FC = () => {
+// Bottom Tab Navigator Component
+const BottomTabs: React.FC = () => {
     const colors = useTheme();
     const insets = useSafeAreaInsets();
+    const { cartCount } = useCart(); // Get dynamic cart count
 
     return (
         <Tab.Navigator
@@ -66,7 +75,7 @@ const FrontNavigation: React.FC = () => {
             />
 
             <Tab.Screen
-                name="Categories"
+                name={constant.routeName.categories}
                 component={CategoriesScreen}
                 options={{
                     tabBarLabel: 'Categories',
@@ -83,7 +92,7 @@ const FrontNavigation: React.FC = () => {
             />
 
             <Tab.Screen
-                name="Cart"
+                name={constant.routeName.cart}
                 component={CartScreen}
                 options={{
                     tabBarLabel: 'Cart',
@@ -96,7 +105,19 @@ const FrontNavigation: React.FC = () => {
                             />
                         )
                     },
-                    tabBarBadge: 3, // Dynamic cart count (update from context/state)
+                    // Dynamic cart badge - only show when cart has items
+                    tabBarBadge: cartCount > 0 ? cartCount : undefined,
+                    tabBarBadgeStyle: {
+                        backgroundColor: '#FF5252',
+                        color: '#FFFFFF',
+                        fontSize: fonts.size.font10,
+                        fontFamily: fonts.family.primaryBold,
+                        minWidth: 18,
+                        height: 18,
+                        borderRadius: 9,
+                        lineHeight: Platform.OS === 'ios' ? 18 : 17,
+                        textAlign: 'center',
+                    }
                 }}
             />
 
@@ -117,6 +138,40 @@ const FrontNavigation: React.FC = () => {
                 }}
             />
         </Tab.Navigator>
+    );
+};
+
+// Main Front Navigation with Stack
+const FrontNavigation: React.FC = () => {
+    return (
+        <Stack.Navigator
+            screenOptions={{
+                headerShown: false,
+                animation: 'slide_from_right',
+            }}
+        >
+            {/* Main Tab Navigator */}
+            <Stack.Screen
+                name={constant.routeName.mainTabs}
+                component={BottomTabs}
+            />
+
+            {/* Stack Screens (Hidden from tabs) */}
+            <Stack.Screen
+                name={constant.routeName.categoryDetail}
+                component={CategoryDetailScreen as any}
+            />
+
+            <Stack.Screen
+                name={constant.routeName.products}
+                component={ProductListScreen as any}
+            />
+
+            <Stack.Screen
+                name={constant.routeName.productDetail}
+                component={ProductDetailScreen as any}
+            />
+        </Stack.Navigator>
     );
 };
 

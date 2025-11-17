@@ -1,5 +1,9 @@
-import { Alert, Linking, Platform } from "react-native";
-import constant from "./constant";
-import StorageManager from "../managers/StorageManager";
-import { useEffect, useState } from 'react';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { showMessage } from "react-native-flash-message";
+
+export const showToast = ({ message, description = "", isSuccess }: { message: string, description?: string, isSuccess?: boolean }) => {
+    showMessage({
+        message: message,
+        description: description,
+        type: isSuccess ? 'success' : 'danger',
+    });
+};

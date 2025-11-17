@@ -14,11 +14,12 @@ interface CartContextType {
     cartItems: CartItem[];
     cartCount: number;
     cartTotal: number;
-    addToCart: (item: Omit<CartItem, 'quantity'>) => void;
+    addToCart: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => void;
     removeFromCart: (itemId: number) => void;
     updateQuantity: (itemId: number, quantity: number) => void;
     clearCart: () => void;
     isInCart: (itemId: number) => boolean;
+    getCartItem: (itemId: number) => CartItem | undefined;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -61,18 +62,19 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
         }
     };
 
-    const addToCart = (item: Omit<CartItem, 'quantity'>) => {
+    const addToCart = (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => {
         setCartItems((prevItems) => {
             const existingItem = prevItems.find((i) => i.id === item.id);
+            const quantityToAdd = item.quantity || 1;
 
             if (existingItem) {
                 // Item already in cart, increase quantity
                 return prevItems.map((i) =>
-                    i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
+                    i.id === item.id ? { ...i, quantity: i.quantity + quantityToAdd } : i
                 );
             } else {
-                // New item, add with quantity 1
-                return [...prevItems, { ...item, quantity: 1 }];
+                // New item, add with specified quantity
+                return [...prevItems, { ...item, quantity: quantityToAdd }];
             }
         });
     };
@@ -102,6 +104,10 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
         return cartItems.some((item) => item.id === itemId);
     };
 
+    const getCartItem = (itemId: number): CartItem | undefined => {
+        return cartItems.find((item) => item.id === itemId);
+    };
+
     const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
     const cartTotal = cartItems.reduce((total, item) => total + item.price * item.quantity, 0);
 
@@ -116,6 +122,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
                 updateQuantity,
                 clearCart,
                 isInCart,
+                getCartItem,
             }}
         >
             {children}

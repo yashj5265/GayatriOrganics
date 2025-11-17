@@ -2,13 +2,14 @@
  * @format
  */
 
-import { AppRegistry } from 'react-native';
+import { AppRegistry, StatusBar } from 'react-native';
 import { name as appName } from './app.json';
 import NavigationManager from './main/src/navigations/NavigationManager';
 import { ThemeProvider } from './main/src/contexts/ThemeProvider';
 import { AuthProvider } from './main/src/contexts/AuthContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { CartProvider } from './main/src/contexts/CardContext';
+import FlashMessage from 'react-native-flash-message';
 
 const MainApp = () => {
     return (
@@ -17,6 +18,10 @@ const MainApp = () => {
                 <AuthProvider>
                     <CartProvider>
                         <NavigationManager />
+                        <FlashMessage
+                            position='top'
+                            style={{ marginTop: Platform.OS === 'android' ? StatusBar.currentHeight : undefined }}
+                        />
                     </CartProvider>
                 </AuthProvider>
             </ThemeProvider>

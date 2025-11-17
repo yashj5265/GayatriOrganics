@@ -1,24 +1,26 @@
 import NetInfo from "@react-native-community/netinfo";
 import { Platform } from "react-native";
+import { showToast } from "../utilities/utils";
 
 export interface ApiResponse<T = any> {
     success: boolean;
     message?: string;
     data?: T;
+    count?: number;
     [key: string]: any;
 }
 
 export interface ApiConfig {
     endpoint: string;
     method?: "GET" | "POST" | "PUT" | "DELETE";
-    params?: Record<string, any>;
+    params?: Record<string, any> | FormData;
     token?: string;
     showError?: boolean;
     showSuccess?: boolean;
     isFormData?: boolean;
 }
 
-const BASE_URL = "https://washier-joan-unturgid.ngrok-free.dev/";
+const BASE_URL = "https://gayatriorganicfarm.com";
 
 export default class ApiManager {
     static async request<T = any>({
@@ -30,19 +32,37 @@ export default class ApiManager {
         showSuccess = false,
         isFormData = false,
     }: ApiConfig): Promise<ApiResponse<T>> {
-        // ✅ Check internet
+        // ✅ Check internet connection
         const netInfo = await NetInfo.fetch();
         if (!netInfo.isConnected) {
-            throw new Error("No internet connection");
+            const errorMsg = "No internet connection";
+            if (showError) {
+                showToast({
+                    message: "Connection Error",
+                    description: errorMsg,
+                    isSuccess: false,
+                });
+            }
+            throw new Error(errorMsg);
         }
 
-        const url = `${BASE_URL}${`${endpoint}`}`;
+        const url = `${BASE_URL}${endpoint}`;
+
+        // 🔥 CRITICAL: For FormData, headers must be minimal
+        // React Native will automatically set Content-Type with boundary
         const headers: Record<string, string> = {
-            "Accept": "application/json",
-            "Content-Type": isFormData ? "multipart/form-data" : "application/json",
             "platform": Platform.OS,
         };
-        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        // Only add these headers for non-FormData requests
+        if (!isFormData) {
+            headers["Accept"] = "application/json";
+            headers["Content-Type"] = "application/json";
+        }
+
+        if (token) {
+            headers["Authorization"] = `Bearer ${token}`;
+        }
 
         const options: RequestInit = {
             method,
@@ -50,44 +70,199 @@ export default class ApiManager {
         };
 
         if (method !== "GET") {
-            options.body = isFormData ? params as any : JSON.stringify(params);
+            options.body = isFormData ? (params as any) : JSON.stringify(params);
         }
 
         try {
-            const response = await fetch(url, options);
-            const json = await response.json();
+            console.log('📡 API Request:', {
+                url,
+                method,
+                isFormData,
+                hasToken: !!token,
+                headers,
+            });
 
-            if (!response.ok) {
-                if (showError) console.warn(`❌ ${json.message || "Request failed"}`);
-                throw new Error(json.message || "Request failed");
+            const response = await fetch(url, options);
+
+            let json;
+            try {
+                json = await response.json();
+            } catch (parseError) {
+                console.error('❌ Failed to parse response:', parseError);
+                const errorMsg = 'Invalid response from server';
+                if (showError) {
+                    showToast({
+                        message: "Parse Error",
+                        description: errorMsg,
+                        isSuccess: false,
+                    });
+                }
+                throw new Error(errorMsg);
             }
 
-            if (showSuccess) console.log(`✅ ${json.message || "Success"}`);
+            console.log('📥 API Response:', {
+                status: response.status,
+                ok: response.ok,
+                data: json,
+            });
+
+            if (!response.ok) {
+                const errorMessage = json.message || json.error || "Request failed";
+
+                if (showError) {
+                    console.warn(`❌ ${errorMessage}`);
+                    showToast({
+                        message: "Error",
+                        description: errorMessage,
+                        isSuccess: false,
+                    });
+                }
+                throw new Error(errorMessage);
+            }
+
+            if (showSuccess && json.message) {
+                console.log(`✅ ${json.message}`);
+                showToast({
+                    message: "Success",
+                    description: json.message,
+                    isSuccess: true,
+                });
+            }
+
             return json as ApiResponse<T>;
-        } catch (err) {
-            if (showError) console.error("API Error:", err);
+        } catch (err: any) {
+            if (showError && err.message) {
+                console.error("❌ API Error:", err);
+
+                // Only show toast if we haven't already shown one
+                if (err.message !== "No internet connection" &&
+                    err.message !== "Invalid response from server") {
+                    showToast({
+                        message: "Request Failed",
+                        description: err.message,
+                        isSuccess: false,
+                    });
+                }
+            }
             throw err;
         }
     }
 
-    // 👉 Shortcut methods
-    static get<T = any>({ endpoint, token }: { endpoint: string, token?: string }) {
-        return this.request<T>({ endpoint, method: "GET", token });
+    // 👉 Shortcut methods with enhanced options
+    static get<T = any>({
+        endpoint,
+        token,
+        showError = true,
+        showSuccess = false,
+    }: {
+        endpoint: string;
+        token?: string;
+        showError?: boolean;
+        showSuccess?: boolean;
+    }) {
+        return this.request<T>({
+            endpoint,
+            method: "GET",
+            token,
+            showError,
+            showSuccess,
+        });
     }
 
-    static post<T = any>({ endpoint, params, token }: { endpoint: string, params?: any, token?: string }) {
-        return this.request<T>({ endpoint, method: "POST", params, token });
+    static post<T = any>({
+        endpoint,
+        params,
+        token,
+        isFormData = false,
+        showError = true,
+        showSuccess = false,
+    }: {
+        endpoint: string;
+        params?: any;
+        token?: string;
+        isFormData?: boolean;
+        showError?: boolean;
+        showSuccess?: boolean;
+    }) {
+        return this.request<T>({
+            endpoint,
+            method: "POST",
+            params,
+            token,
+            isFormData,
+            showError,
+            showSuccess,
+        });
     }
 
-    static put<T = any>({ endpoint, params, token }: { endpoint: string, params?: any, token?: string }) {
-        return this.request<T>({ endpoint, method: "PUT", params, token });
+    static put<T = any>({
+        endpoint,
+        params,
+        token,
+        isFormData = false,
+        showError = true,
+        showSuccess = false,
+    }: {
+        endpoint: string;
+        params?: any;
+        token?: string;
+        isFormData?: boolean;
+        showError?: boolean;
+        showSuccess?: boolean;
+    }) {
+        return this.request<T>({
+            endpoint,
+            method: "PUT",
+            params,
+            token,
+            isFormData,
+            showError,
+            showSuccess,
+        });
     }
 
-    static delete<T = any>({ endpoint, token }: { endpoint: string, token?: string }) {
-        return this.request<T>({ endpoint, method: "DELETE", token });
+    static delete<T = any>({
+        endpoint,
+        token,
+        showError = true,
+        showSuccess = false,
+    }: {
+        endpoint: string;
+        token?: string;
+        showError?: boolean;
+        showSuccess?: boolean;
+    }) {
+        return this.request<T>({
+            endpoint,
+            method: "DELETE",
+            token,
+            showError,
+            showSuccess,
+        });
     }
 
-    static upload<T = any>({ endpoint, formData, token }: { endpoint: string, formData: FormData, token?: string }) {
-        return this.request<T>({ endpoint, method: "POST", params: formData, token, isFormData: true });
+    // 📤 Dedicated upload method for better clarity
+    static upload<T = any>({
+        endpoint,
+        formData,
+        token,
+        showError = true,
+        showSuccess = false,
+    }: {
+        endpoint: string;
+        formData: FormData;
+        token?: string;
+        showError?: boolean;
+        showSuccess?: boolean;
+    }) {
+        return this.request<T>({
+            endpoint,
+            method: "POST",
+            params: formData,
+            token,
+            isFormData: true,
+            showError,
+            showSuccess,
+        });
     }
 }

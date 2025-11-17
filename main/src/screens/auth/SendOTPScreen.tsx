@@ -64,10 +64,11 @@ const SendOTPScreen: React.FC<Props> = ({ navigation }) => {
 
             console.log('✅ OTP Response:', response);
 
-            if (response?.success) {
+            // Check if response has message (indicating success)
+            if (response?.message) {
                 Alert.alert(
                     'Success',
-                    `OTP sent successfully to ${mobile}${response.otp ? `\n\nDemo OTP: ${response.otp}` : ''}`,
+                    `${response.message}${response.otp ? `\n\nDemo OTP: ${response.otp}` : ''}`,
                     [
                         {
                             text: 'OK',
@@ -82,10 +83,10 @@ const SendOTPScreen: React.FC<Props> = ({ navigation }) => {
                 );
                 setLoading(false);
             } else {
-                console.error('❌ Send OTP failed:', response?.message);
+                console.error('❌ Send OTP failed: No message in response');
                 Alert.alert(
                     'Error',
-                    response?.message || 'Failed to send OTP. Please try again.'
+                    'Failed to send OTP. Please try again.'
                 );
                 setLoading(false);
             }
@@ -104,6 +105,72 @@ const SendOTPScreen: React.FC<Props> = ({ navigation }) => {
             setLoading(false);
         }
     };
+
+    // const handleSendOTP = () => {
+    //     if (!mobile) {
+    //         Alert.alert('Validation Error', 'Please enter your mobile number');
+    //         return;
+    //     }
+
+    //     if (!validateMobile(mobile)) {
+    //         Alert.alert('Validation Error', 'Please enter a valid 10-digit mobile number');
+    //         return;
+    //     }
+
+    //     setLoading(true);
+
+    //     console.log('📞 Sending OTP to:', mobile);
+
+    //     ApiManager.post({
+    //         endpoint: constant.apiEndPoints.sendOTP,
+    //         params: {
+    //             mobile: mobile.trim(),
+    //         }
+    //     })
+    //         .then((response: SendOTPResponse) => {
+    //             console.log('✅ OTP Response:', response);
+
+    //             if (response?.success) {
+    //                 Alert.alert(
+    //                     'Success',
+    //                     `OTP sent successfully to ${mobile}${response.otp ? `\n\nDemo OTP: ${response.otp}` : ''}`,
+    //                     [
+    //                         {
+    //                             text: 'OK',
+    //                             onPress: () => {
+    //                                 navigation.navigate(constant.routeName.verifyOTPScreen, {
+    //                                     mobile: mobile,
+    //                                     demoOTP: response.otp || null,
+    //                                 });
+    //                             }
+    //                         }
+    //                     ]
+    //                 );
+    //             } else {
+    //                 console.error('❌ Send OTP failed:', response?.message);
+    //                 Alert.alert(
+    //                     'Error',
+    //                     response?.message || 'Failed to send OTP. Please try again.'
+    //                 );
+    //             }
+    //         })
+    //         .catch((error: any) => {
+    //             console.error('❌ Send OTP error:', error);
+
+    //             let errorMessage = 'Something went wrong. Please try again.';
+
+    //             if (error.message === 'No internet connection') {
+    //                 errorMessage = 'No internet connection. Please check your network and try again.';
+    //             } else if (error.message) {
+    //                 errorMessage = error.message;
+    //             }
+
+    //             Alert.alert('Error', errorMessage);
+    //         })
+    //         .finally(() => {
+    //             setLoading(false);
+    //         });
+    // };
 
     return (
         <MainContainer
