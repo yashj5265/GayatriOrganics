@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import StorageManager, { StorageKey } from '../managers/StorageManager';
 
-interface CartItem {
+export interface CartItem {
     id: number;
     name: string;
     price: number;
@@ -35,55 +35,53 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
 
     // Load cart from storage on mount
     useEffect(() => {
-        loadCartFromStorage();
+        const loadCart = async () => {
+            try {
+                const storedCart = await StorageManager.getItem<CartItem[]>(CART_STORAGE_KEY);
+                if (storedCart && Array.isArray(storedCart)) {
+                    setCartItems(storedCart);
+                }
+            } catch (error) {
+                console.error('Error loading cart from storage:', error);
+            }
+        };
+        loadCart();
     }, []);
 
     // Save cart to storage whenever it changes
     useEffect(() => {
-        saveCartToStorage();
+        const saveCart = async () => {
+            try {
+                await StorageManager.setItem(CART_STORAGE_KEY, cartItems);
+            } catch (error) {
+                console.error('Error saving cart to storage:', error);
+            }
+        };
+        if (cartItems.length > 0) {
+            saveCart();
+        }
     }, [cartItems]);
 
-    const loadCartFromStorage = async () => {
-        try {
-            const storedCart = await StorageManager.getItem<CartItem[]>(CART_STORAGE_KEY);
-            if (storedCart && Array.isArray(storedCart)) {
-                setCartItems(storedCart);
-            }
-        } catch (error) {
-            console.error('Error loading cart from storage:', error);
-        }
-    };
-
-    const saveCartToStorage = async () => {
-        try {
-            await StorageManager.setItem(CART_STORAGE_KEY, cartItems);
-        } catch (error) {
-            console.error('Error saving cart to storage:', error);
-        }
-    };
-
-    const addToCart = (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => {
+    const addToCart = useCallback((item: Omit<CartItem, 'quantity'> & { quantity?: number }) => {
         setCartItems((prevItems) => {
             const existingItem = prevItems.find((i) => i.id === item.id);
             const quantityToAdd = item.quantity || 1;
 
             if (existingItem) {
-                // Item already in cart, increase quantity
                 return prevItems.map((i) =>
                     i.id === item.id ? { ...i, quantity: i.quantity + quantityToAdd } : i
                 );
             } else {
-                // New item, add with specified quantity
                 return [...prevItems, { ...item, quantity: quantityToAdd }];
             }
         });
-    };
+    }, []);
 
-    const removeFromCart = (itemId: number) => {
+    const removeFromCart = useCallback((itemId: number) => {
         setCartItems((prevItems) => prevItems.filter((item) => item.id !== itemId));
-    };
+    }, []);
 
-    const updateQuantity = (itemId: number, quantity: number) => {
+    const updateQuantity = useCallback((itemId: number, quantity: number) => {
         if (quantity <= 0) {
             removeFromCart(itemId);
             return;
@@ -94,37 +92,43 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
                 item.id === itemId ? { ...item, quantity } : item
             )
         );
-    };
+    }, [removeFromCart]);
 
-    const clearCart = () => {
+    const clearCart = useCallback(() => {
         setCartItems([]);
-    };
+    }, []);
 
-    const isInCart = (itemId: number): boolean => {
+    const isInCart = useCallback((itemId: number): boolean => {
         return cartItems.some((item) => item.id === itemId);
-    };
+    }, [cartItems]);
 
-    const getCartItem = (itemId: number): CartItem | undefined => {
+    const getCartItem = useCallback((itemId: number): CartItem | undefined => {
         return cartItems.find((item) => item.id === itemId);
-    };
+    }, [cartItems]);
 
-    const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
-    const cartTotal = cartItems.reduce((total, item) => total + item.price * item.quantity, 0);
+    // Memoize computed values
+    const cartCount = useMemo(() => {
+        return cartItems.reduce((total, item) => total + item.quantity, 0);
+    }, [cartItems]);
+
+    const cartTotal = useMemo(() => {
+        return cartItems.reduce((total, item) => total + item.price * item.quantity, 0);
+    }, [cartItems]);
+
+    const contextValue = useMemo(() => ({
+        cartItems,
+        cartCount,
+        cartTotal,
+        addToCart,
+        removeFromCart,
+        updateQuantity,
+        clearCart,
+        isInCart,
+        getCartItem,
+    }), [cartItems, cartCount, cartTotal, addToCart, removeFromCart, updateQuantity, clearCart, isInCart, getCartItem]);
 
     return (
-        <CartContext.Provider
-            value={{
-                cartItems,
-                cartCount,
-                cartTotal,
-                addToCart,
-                removeFromCart,
-                updateQuantity,
-                clearCart,
-                isInCart,
-                getCartItem,
-            }}
-        >
+        <CartContext.Provider value={contextValue}>
             {children}
         </CartContext.Provider>
     );

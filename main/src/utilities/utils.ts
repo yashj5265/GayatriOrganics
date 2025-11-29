@@ -1,9 +1,25 @@
-import { showMessage } from "react-native-flash-message";
+import { showMessage, MessageOptions } from "react-native-flash-message";
 
-export const showToast = ({ message, description = "", isSuccess }: { message: string, description?: string, isSuccess?: boolean }) => {
-    showMessage({
-        message: message,
-        description: description,
+export interface ToastOptions {
+    message: string;
+    description?: string;
+    isSuccess?: boolean;
+}
+
+/**
+ * Displays a toast notification to the user
+ * @param options - Toast configuration options
+ */
+export const showToast = ({ 
+    message, 
+    description = "", 
+    isSuccess = false 
+}: ToastOptions): void => {
+    const options: MessageOptions = {
+        message,
+        description,
         type: isSuccess ? 'success' : 'danger',
-    });
+    };
+    
+    showMessage(options);
 };

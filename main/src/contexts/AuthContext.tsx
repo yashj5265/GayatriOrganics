@@ -1,11 +1,26 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import StorageManager from '../managers/StorageManager';
+import React, {
+    createContext,
+    useContext,
+    useState,
+    useEffect,
+    useCallback,
+    ReactNode,
+} from 'react';
+import StorageManager, { StorageKey } from '../managers/StorageManager';
 import constant from '../utilities/constant';
+
+export interface AuthUser {
+    id?: number;
+    name?: string;
+    mobile?: string;
+    [key: string]: any;
+}
 
 interface AuthContextType {
     isLoggedIn: boolean;
     isLoading: boolean;
-    login: (token: string, userData?: any) => Promise<void>;
+    user: AuthUser | null;
+    login: (token: string, userData?: AuthUser) => Promise<void>;
     logout: () => Promise<void>;
 }
 
@@ -16,59 +31,60 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-    const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [user, setUser] = useState<AuthUser | null>(null);
 
     useEffect(() => {
-        checkLoginStatus();
+        const bootstrapAuth = async () => {
+            try {
+                await StorageManager.sync();
+                const token = await StorageManager.getItem<string>(constant.shareInstanceKey.authToken);
+                const savedUser = await StorageManager.getItem<AuthUser>(constant.shareInstanceKey.userData);
+
+                setIsLoggedIn(!!token);
+                setUser(token ? savedUser : null);
+            } catch (error) {
+                console.error('❌ Error checking auth status:', error);
+                setIsLoggedIn(false);
+                setUser(null);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        void bootstrapAuth();
     }, []);
 
-    const checkLoginStatus = async () => {
+    const login = useCallback(async (token: string, userData?: AuthUser) => {
         try {
-            await StorageManager.sync();
-            const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
-            console.log('🔍 Auth Check:', token ? 'Logged in ✅' : 'Not logged in ❌');
-            setIsLoggedIn(!!token);
-        } catch (error) {
-            console.error('❌ Error checking auth status:', error);
-            setIsLoggedIn(false);
-        } finally {
-            setTimeout(() => setIsLoading(false), 1500);
-        }
-    };
-
-    const login = async (token: string, userData?: any) => {
-        try {
-            console.log('💾 Storing auth data...');
-
-            await StorageManager.setItem(constant.shareInstanceKey.authToken, token);
+            await StorageManager.setItem(StorageKey.TOKEN, token);
 
             if (userData) {
-                await StorageManager.setItem(constant.shareInstanceKey.userData, userData);
+                await StorageManager.setItem(StorageKey.USER, userData);
+                setUser(userData);
             }
 
-            console.log('✅ Auth data stored successfully');
             setIsLoggedIn(true);
         } catch (error) {
             console.error('❌ Error during login:', error);
             throw error;
         }
-    };
+    }, []);
 
-    const logout = async () => {
+    const logout = useCallback(async () => {
         try {
-            console.log('🔄 Logging out...');
             await StorageManager.clearAll();
-            console.log('✅ Storage cleared');
             setIsLoggedIn(false);
+            setUser(null);
         } catch (error) {
             console.error('❌ Error during logout:', error);
             throw error;
         }
-    };
+    }, []);
 
     return (
-        <AuthContext.Provider value={{ isLoggedIn, isLoading, login, logout }}>
+        <AuthContext.Provider value={{ isLoggedIn, isLoading, user, login, logout }}>
             {children}
         </AuthContext.Provider>
     );

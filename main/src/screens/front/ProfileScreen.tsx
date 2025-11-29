@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MainContainer from '../../container/MainContainer';
@@ -10,22 +10,56 @@ import StorageManager from '../../managers/StorageManager';
 import ApiManager from '../../managers/ApiManager';
 import constant from '../../utilities/constant';
 
-interface Props {
+interface ProfileScreenProps {
     navigation: NativeStackNavigationProp<any>;
 }
 
-const ProfileScreen: React.FC<Props> = ({ navigation }) => {
+interface MenuItem {
+    id: number;
+    label: string;
+    icon: string;
+    route: string;
+}
+
+interface MenuSection {
+    title: string;
+    items: MenuItem[];
+}
+
+const MENU_SECTIONS: MenuSection[] = [
+    {
+        title: 'Account',
+        items: [
+            { id: 1, label: 'My Orders', icon: '📦', route: 'MyOrders' },
+            { id: 2, label: 'Saved Addresses', icon: '📍', route: 'Addresses' },
+            { id: 3, label: 'Edit Profile', icon: '✏️', route: 'EditProfile' },
+        ],
+    },
+    {
+        title: 'Preferences',
+        items: [
+            { id: 4, label: 'Notifications', icon: '🔔', route: 'Notifications' },
+            { id: 5, label: 'Language', icon: '🌐', route: 'Language' },
+        ],
+    },
+    {
+        title: 'Support',
+        items: [
+            { id: 6, label: 'Help & Support', icon: '❓', route: 'Support' },
+            { id: 7, label: 'About Us', icon: 'ℹ️', route: 'About' },
+            { id: 8, label: 'Terms & Privacy', icon: '📄', route: 'Terms' },
+        ],
+    },
+];
+
+const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
     const colors = useTheme();
     const { logout } = useAuth();
     const [userName, setUserName] = useState<string>('User');
     const [userMobile, setUserMobile] = useState<string>('');
     const [loading, setLoading] = useState(false);
 
-    useEffect(() => {
-        loadUserData();
-    }, []);
-
-    const loadUserData = async () => {
+    const loadUserData = useCallback(async () => {
         try {
             const userData = await StorageManager.getItem(constant.shareInstanceKey.userData);
             if (userData && typeof userData === 'object') {
@@ -39,20 +73,13 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         } catch (error) {
             console.error('Error loading user data:', error);
         }
-    };
+    }, []);
 
-    const handleLogout = () => {
-        Alert.alert('Logout', 'Are you sure you want to logout?', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Logout',
-                style: 'destructive',
-                onPress: performLogout,
-            },
-        ]);
-    };
+    useEffect(() => {
+        loadUserData();
+    }, [loadUserData]);
 
-    const performLogout = async () => {
+    const performLogout = useCallback(async () => {
         setLoading(true);
         try {
             const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
@@ -72,33 +99,32 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
             Alert.alert('Error', 'Failed to logout. Please try again.');
             setLoading(false);
         }
-    };
+    }, [logout]);
 
-    const menuSections = [
-        {
-            title: 'Account',
-            items: [
-                { id: 1, label: 'My Orders', icon: '📦', route: 'MyOrders' },
-                { id: 2, label: 'Saved Addresses', icon: '📍', route: 'Addresses' },
-                { id: 3, label: 'Edit Profile', icon: '✏️', route: 'EditProfile' },
-            ],
-        },
-        {
-            title: 'Preferences',
-            items: [
-                { id: 4, label: 'Notifications', icon: '🔔', route: 'Notifications' },
-                { id: 5, label: 'Language', icon: '🌐', route: 'Language' },
-            ],
-        },
-        {
-            title: 'Support',
-            items: [
-                { id: 6, label: 'Help & Support', icon: '❓', route: 'Support' },
-                { id: 7, label: 'About Us', icon: 'ℹ️', route: 'About' },
-                { id: 8, label: 'Terms & Privacy', icon: '📄', route: 'Terms' },
-            ],
-        },
-    ];
+    const handleLogout = useCallback(() => {
+        Alert.alert('Logout', 'Are you sure you want to logout?', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Logout',
+                style: 'destructive',
+                onPress: performLogout,
+            },
+        ]);
+    }, [performLogout]);
+
+    const handleMenuPress = useCallback((route: string) => {
+        if (route === 'Addresses') {
+            navigation.navigate(constant.routeName.addressList);
+        } else {
+            // TODO: Implement navigation for other routes when available
+            console.log('Navigate to:', route);
+        }
+    }, [navigation]);
+
+    const userInitial = useMemo(() =>
+        userName.charAt(0).toUpperCase(),
+        [userName]
+    );
 
     return (
         <MainContainer
@@ -112,7 +138,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                     <View style={styles.profileSection}>
                         <View style={[styles.avatar, { backgroundColor: colors.white }]}>
                             <Text style={[styles.avatarText, { color: colors.themePrimary }]}>
-                                {userName.charAt(0).toUpperCase()}
+                                {userInitial}
                             </Text>
                         </View>
                         <View style={styles.profileInfo}>
@@ -132,7 +158,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                     contentContainerStyle={styles.contentContainer}
                     showsVerticalScrollIndicator={false}
                 >
-                    {menuSections.map((section, sectionIndex) => (
+                    {MENU_SECTIONS.map((section, sectionIndex) => (
                         <View key={sectionIndex} style={styles.section}>
                             <Text style={[styles.sectionTitle, { color: colors.textLabel }]}>
                                 {section.title}
@@ -148,7 +174,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                                     <View key={item.id}>
                                         <AppTouchableRipple
                                             style={styles.menuItem}
-                                            onPress={() => console.log('Navigate to:', item.route)}
+                                            onPress={() => handleMenuPress(item.route)}
                                         >
                                             <View style={styles.menuItemLeft}>
                                                 <Text style={styles.menuIcon}>{item.icon}</Text>
@@ -204,7 +230,9 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
     );
 };
 
-export default ProfileScreen;
+ProfileScreen.displayName = 'ProfileScreen';
+
+export default memo(ProfileScreen);
 
 const styles = StyleSheet.create({
     container: {

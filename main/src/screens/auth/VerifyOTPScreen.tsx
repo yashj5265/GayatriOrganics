@@ -1,12 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    Alert,
-    Platform,
-    TouchableOpacity,
-} from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, Alert, Platform, TouchableOpacity } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import AppTextInput from '../../components/AppTextInput';
 import { useTheme } from '../../contexts/ThemeProvider';
@@ -19,13 +12,36 @@ import AppTouchableRipple from '../../components/AppTouchableRipple';
 import MainContainer from '../../container/MainContainer';
 import { useAuth } from '../../contexts/AuthContext';
 
-interface Props {
-    navigation: NativeStackNavigationProp<any>;
-    route: RouteProp<{ params: { mobile: string; demoOTP?: number } }, 'params'>;
+type AuthStackParamList = {
+    [constant.routeName.sendOTPScreen]: undefined;
+    [constant.routeName.verifyOTPScreen]: {
+        mobile: string;
+        demoOTP?: number;
+    };
+};
+
+type VerifyOTPScreenNavigationProp = NativeStackNavigationProp<
+    AuthStackParamList,
+    typeof constant.routeName.verifyOTPScreen
+>;
+
+type VerifyOTPScreenRouteProp = RouteProp<
+    {
+        [constant.routeName.verifyOTPScreen]: {
+            mobile: string;
+            demoOTP?: number;
+        };
+    },
+    typeof constant.routeName.verifyOTPScreen
+>;
+
+interface VerifyOTPScreenProps {
+    navigation: VerifyOTPScreenNavigationProp;
+    route: VerifyOTPScreenRouteProp;
 }
 
 interface VerifyOTPResponse {
-    success: boolean;
+    success?: boolean;
     message?: string;
     token?: string;
     user?: {
@@ -35,7 +51,7 @@ interface VerifyOTPResponse {
     };
 }
 
-const VerifyOTPScreen: React.FC<Props> = ({ navigation, route }) => {
+const VerifyOTPScreen: React.FC<VerifyOTPScreenProps> = ({ navigation, route }) => {
     const { mobile, demoOTP } = route.params;
     const [otp, setOtp] = useState<string>('');
     const [loading, setLoading] = useState<boolean>(false);
@@ -45,6 +61,8 @@ const VerifyOTPScreen: React.FC<Props> = ({ navigation, route }) => {
     const { login } = useAuth();
 
     useEffect(() => {
+        if (!timer) return;
+
         const interval = setInterval(() => {
             setTimer((prev) => {
                 if (prev <= 1) {
@@ -57,13 +75,13 @@ const VerifyOTPScreen: React.FC<Props> = ({ navigation, route }) => {
         }, 1000);
 
         return () => clearInterval(interval);
-    }, []);
+    }, [timer]);
 
-    const formatTime = (seconds: number): string => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
+    const formattedTimer = useMemo(() => {
+        const mins = Math.floor(timer / 60);
+        const secs = timer % 60;
         return `${mins}:${secs.toString().padStart(2, '0')}`;
-    };
+    }, [timer]);
 
     // const handleVerifyOTP = async () => {
     //     if (!otp || otp.length !== 4) {
@@ -128,16 +146,14 @@ const VerifyOTPScreen: React.FC<Props> = ({ navigation, route }) => {
     //     }
     // };
 
-    const handleVerifyOTP = async () => {
+    const handleVerifyOTP = useCallback(async () => {
         if (!otp || otp.length !== 4) {
             Alert.alert('Validation Error', 'Please enter 4-digit OTP');
             return;
         }
 
-        setLoading(true);
-
         try {
-            console.log('🔐 Verifying OTP for:', mobile);
+            setLoading(true);
 
             const response: VerifyOTPResponse = await ApiManager.post({
                 endpoint: constant.apiEndPoints.verifyOTP,
@@ -147,9 +163,6 @@ const VerifyOTPScreen: React.FC<Props> = ({ navigation, route }) => {
                 },
             });
 
-            console.log('✅ Verify OTP Response:', response);
-
-            // Check if response has token (indicating success)
             if (response?.token) {
                 const token = response.token;
                 const userData = response.user;
@@ -157,21 +170,14 @@ const VerifyOTPScreen: React.FC<Props> = ({ navigation, route }) => {
                 // Use AuthContext login function
                 await login(token, userData);
 
-                console.log('✅ Login successful! Navigation will happen automatically.');
-
                 Alert.alert('Success', response?.message || 'Login successful!');
-
             } else {
-                console.error('❌ Verify OTP failed:', response?.message);
                 Alert.alert(
                     'Verification Failed',
                     response?.message || 'Invalid OTP. Please check and try again.'
                 );
-                setLoading(false);
             }
         } catch (error: any) {
-            console.error('❌ Verify OTP error:', error);
-
             let errorMessage = 'Something went wrong. Please try again.';
 
             if (error.message === 'No internet connection') {
@@ -181,16 +187,17 @@ const VerifyOTPScreen: React.FC<Props> = ({ navigation, route }) => {
             }
 
             Alert.alert('Error', errorMessage);
+        } finally {
             setLoading(false);
         }
-    };
+    }, [otp, mobile, login]);
 
-    const handleResendOTP = async () => {
-        setLoading(true);
-        setCanResend(false);
-        setTimer(300);
-
+    const handleResendOTP = useCallback(async () => {
         try {
+            setLoading(true);
+            setCanResend(false);
+            setTimer(300);
+
             const response = await ApiManager.post({
                 endpoint: constant.apiEndPoints.sendOTP,
                 params: {
@@ -204,14 +211,13 @@ const VerifyOTPScreen: React.FC<Props> = ({ navigation, route }) => {
                     `OTP resent successfully${response.otp ? `\n\nDemo OTP: ${response.otp}` : ''}`
                 );
             }
-            setLoading(false);
         } catch (error) {
-            console.error('Resend OTP error:', error);
             Alert.alert('Error', 'Failed to resend OTP. Please try again.');
-            setLoading(false);
             setCanResend(true);
+        } finally {
+            setLoading(false);
         }
-    };
+    }, [mobile]);
 
     return (
         <MainContainer
@@ -268,7 +274,7 @@ const VerifyOTPScreen: React.FC<Props> = ({ navigation, route }) => {
                         <View style={styles.timerContainer}>
                             {!canResend ? (
                                 <Text style={[styles.timerText, { color: colors.textLabel }]}>
-                                    Resend OTP in {formatTime(timer)}
+                                    Resend OTP in {formattedTimer}
                                 </Text>
                             ) : (
                                 <TouchableOpacity
@@ -297,14 +303,12 @@ const VerifyOTPScreen: React.FC<Props> = ({ navigation, route }) => {
 
                     {/* Verify Button */}
                     <AppTouchableRipple
-                        style={[
-                            styles.button,
-                            {
-                                backgroundColor: loading
-                                    ? colors.buttonDisabled
-                                    : colors.themePrimary,
-                            },
-                        ]}
+                        style={{
+                            ...styles.button,
+                            backgroundColor: loading
+                                ? colors.buttonDisabled
+                                : colors.themePrimary,
+                        }}
                         onPress={handleVerifyOTP}
                         disabled={loading}
                     >

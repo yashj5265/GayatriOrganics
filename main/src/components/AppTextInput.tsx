@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import {
     TextInput,
     View,
@@ -16,8 +16,9 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useTheme } from '../contexts/ThemeProvider';
 import { NumberUtils } from '../utilities/NumberUtils';
 import fonts from '../styles/fonts';
+import { AppColors } from '../styles/colors';
 
-interface AppTextInputProps extends React.ComponentProps<typeof TextInput> {
+export interface AppTextInputProps extends React.ComponentProps<typeof TextInput> {
     label: string;
     formatting?: 'none' | 'number' | 'currency';
     errorText?: string;
@@ -95,7 +96,7 @@ const AppTextInput: React.FC<AppTextInputProps> = ({
         }
     }, [value, rawValue, formatting]);
 
-    const inputStyle: TextStyle = {
+    const inputStyle: TextStyle = useMemo(() => ({
         height: 50,
         borderWidth: 1.5,
         borderColor: errorText
@@ -109,10 +110,10 @@ const AppTextInput: React.FC<AppTextInputProps> = ({
         color: colors.textInputText,
         fontSize: fonts.size.font16,
         fontFamily: fonts.family.primaryRegular,
-        paddingTop: Platform.OS === 'ios' ? 16 : 16,
-        paddingBottom: Platform.OS === 'ios' ? 8 : 8,
+        paddingTop: 16,
+        paddingBottom: 8,
         backgroundColor: backgroundColor || colors.textInputBackground,
-    };
+    }), [errorText, isFocused, secureTextEntry, backgroundColor, colors]);
 
     const handleFocus = useCallback(
         (e: any) => {
@@ -174,22 +175,39 @@ const AppTextInput: React.FC<AppTextInputProps> = ({
         [formatting, keyboardType, onChangeText, specialCharactersNotAllowed, onlyAllowAlphabet, isPancard]
     );
 
-    // Calculate label position
-    const labelTop = animatedLabel.interpolate({
-        inputRange: [0, 1.08],
-        outputRange: [Platform.OS === 'ios' ? 16 : 16, -10],
-    });
+    const togglePasswordVisibility = useCallback(() => {
+        setShowPassword(prev => !prev);
+    }, []);
 
-    const labelFontSize = animatedLabel.interpolate({
+    // Calculate label position and styles
+    const labelTop = useMemo(() => animatedLabel.interpolate({
+        inputRange: [0, 1.08],
+        outputRange: [16, -10],
+    }), [animatedLabel]);
+
+    const labelFontSize = useMemo(() => animatedLabel.interpolate({
         inputRange: [0, 1],
         outputRange: [fonts.size.font16, fonts.size.font12],
-    });
+    }), [animatedLabel]);
 
-    const labelColor = errorText
-        ? colors.inputErrorText
-        : isFocused
-            ? colors.themePrimary
-            : colors.textLabel;
+    const labelColor = useMemo(() => 
+        errorText
+            ? colors.inputErrorText
+            : isFocused
+                ? colors.themePrimary
+                : colors.textLabel,
+        [errorText, isFocused, colors]
+    );
+
+    const paddingLeft = useMemo(() => 
+        formatting === 'currency' ? 23 : leftIconName ? 40 : 13,
+        [formatting, leftIconName]
+    );
+
+    const clearButtonRight = useMemo(() => 
+        secureTextEntry ? 42 : 12,
+        [secureTextEntry]
+    );
 
     return (
         <TouchableWithoutFeedback onPress={handleLabelPress}>
@@ -197,10 +215,7 @@ const AppTextInput: React.FC<AppTextInputProps> = ({
                 <View style={styles.inputWrapper}>
                     <TextInput
                         ref={inputRef}
-                        style={{
-                            ...inputStyle,
-                            paddingLeft: formatting === 'currency' ? 23 : leftIconName ? 40 : 13,
-                        }}
+                        style={[inputStyle, { paddingLeft }]}
                         value={formattedDisplayValue}
                         secureTextEntry={secureTextEntry && !showPassword}
                         onFocus={handleFocus}
@@ -245,7 +260,10 @@ const AppTextInput: React.FC<AppTextInputProps> = ({
                 </View>
 
                 {rawValue.length > 0 && isFocused && showCrossButton && (
-                    <TouchableOpacity style={{ ...styles.clearButton, right: secureTextEntry ? 42 : 12, }} onPress={handleClearText}>
+                    <TouchableOpacity 
+                        style={[styles.clearButton, { right: clearButtonRight }]} 
+                        onPress={handleClearText}
+                    >
                         <Feather name="x-circle" size={20} color={colors.themePrimary} />
                     </TouchableOpacity>
                 )}
@@ -259,7 +277,7 @@ const AppTextInput: React.FC<AppTextInputProps> = ({
                 {secureTextEntry && (
                     <TouchableOpacity
                         style={styles.eyeIcon}
-                        onPress={() => setShowPassword(!showPassword)}
+                        onPress={togglePasswordVisibility}
                     >
                         <Feather
                             name={showPassword ? 'eye' : 'eye-off'}
@@ -275,7 +293,7 @@ const AppTextInput: React.FC<AppTextInputProps> = ({
     );
 };
 
-const getStyles = (colors: any) =>
+const getStyles = (colors: AppColors) =>
     StyleSheet.create({
         container: {
             position: 'relative',
@@ -338,4 +356,4 @@ const getStyles = (colors: any) =>
         },
     });
 
-export default React.memo(AppTextInput);
+export default memo(AppTextInput);

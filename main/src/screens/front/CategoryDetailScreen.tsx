@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, Dimensions } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
@@ -11,20 +11,19 @@ import ApiManager from '../../managers/ApiManager';
 import StorageManager from '../../managers/StorageManager';
 import constant from '../../utilities/constant';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ProductCard } from '../../components/listItems';
 
 export interface CategoryDetailScreenProps {
     categoryId: number;
     categoryName?: string;
-};
-
-interface Props {
-    navigation: NativeStackNavigationProp<any>;
-    route: {
-        params: CategoryDetailScreenProps;
-    };
 }
 
-interface Product {
+interface CategoryDetailScreenNavigationProps {
+    navigation: NativeStackNavigationProp<any>;
+    route: RouteProp<{ params: CategoryDetailScreenProps }, 'params'>;
+}
+
+export interface Product {
     id: number;
     name: string;
     description: string;
@@ -33,7 +32,7 @@ interface Product {
     image1: string;
 }
 
-interface CategoryDetail {
+export interface CategoryDetail {
     id: number;
     name: string;
     description: string;
@@ -47,20 +46,16 @@ interface CategoryDetail {
 const { width } = Dimensions.get('window');
 const HEADER_IMAGE_HEIGHT = 240;
 
-const CategoryDetailScreen: React.FC<Props> = ({ navigation, route }) => {
+const CategoryDetailScreen: React.FC<CategoryDetailScreenNavigationProps> = ({ navigation, route }) => {
     const colors = useTheme();
     const insets = useSafeAreaInsets();
 
-    const { categoryId, categoryName } = route.params;
+    const { categoryId } = route.params;
     const [category, setCategory] = useState<CategoryDetail | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [imageError, setImageError] = useState<boolean>(false);
 
-    useEffect(() => {
-        fetchCategoryDetail();
-    }, [categoryId]);
-
-    const fetchCategoryDetail = async () => {
+    const fetchCategoryDetail = useCallback(async () => {
         setLoading(true);
         try {
             const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
@@ -70,8 +65,6 @@ const CategoryDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 token: token || undefined,
                 showError: true,
             });
-
-            console.log('✅ Category Detail Response:', response);
 
             if (response?.success && response?.data) {
                 setCategory(response.data);
@@ -86,20 +79,33 @@ const CategoryDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [categoryId, navigation]);
 
-    const handleViewAllProducts = () => {
+    useEffect(() => {
+        fetchCategoryDetail();
+    }, [fetchCategoryDetail]);
+
+    const handleImageError = useCallback(() => {
+        setImageError(true);
+    }, []);
+
+    const handleViewAllProducts = useCallback(() => {
         if (category) {
             navigation.navigate('CategoryProducts', {
                 categoryId: category.id,
                 categoryName: category.name,
             });
         }
-    };
+    }, [category, navigation]);
 
-    const handleProductPress = (productId: number) => {
+    const handleProductPress = useCallback((productId: number) => {
         navigation.navigate('ProductDetail', { productId });
-    };
+    }, [navigation]);
+
+    const scrollContentStyle = useMemo(() => ({
+        ...styles.scrollContent,
+        paddingBottom: 32 + insets.bottom
+    }), [insets.bottom]);
 
     if (loading || !category) {
         return (
@@ -123,7 +129,7 @@ const CategoryDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             <View style={[styles.container, { backgroundColor: colors.backgroundPrimary }]}>
                 <ScrollView
                     style={styles.scrollView}
-                    contentContainerStyle={{ ...styles.scrollContent, paddingBottom: 32 + insets.bottom }}
+                    contentContainerStyle={scrollContentStyle}
                     showsVerticalScrollIndicator={false}
                 >
                     {/* Header Image */}
@@ -133,7 +139,7 @@ const CategoryDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                                 source={{ uri: category.image_url }}
                                 style={styles.headerImage}
                                 resizeMode="cover"
-                                onError={() => setImageError(true)}
+                                onError={handleImageError}
                             />
                         ) : (
                             <View style={[styles.headerImagePlaceholder, { backgroundColor: colors.themePrimaryLight }]}>
@@ -320,56 +326,6 @@ const CategoryDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 };
 
 // Product Card Component
-interface ProductCardProps {
-    product: Product;
-    onPress: (productId: number) => void;
-    colors: any;
-}
-
-const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, colors }) => {
-    const [imageError, setImageError] = useState(false);
-    const getImageUrl = (imagePath: string) => `https://gayatriorganicfarm.com/storage/${imagePath}`;
-
-    return (
-        <AppTouchableRipple
-            style={[styles.productCard, { backgroundColor: colors.backgroundSecondary }]}
-            onPress={() => onPress(product.id)}
-        >
-            <View style={styles.productImageContainer}>
-                {product.image1 && !imageError ? (
-                    <Image
-                        source={{ uri: getImageUrl(product.image1) }}
-                        style={styles.productImage}
-                        resizeMode="cover"
-                        onError={() => setImageError(true)}
-                    />
-                ) : (
-                    <View style={[styles.productImagePlaceholder, { backgroundColor: colors.themePrimaryLight }]}>
-                        <Icon name="image-off" size={24} color={colors.themePrimary} />
-                    </View>
-                )}
-            </View>
-
-            <View style={styles.productInfo}>
-                <Text style={[styles.productName, { color: colors.textPrimary }]} numberOfLines={2}>
-                    {product.name}
-                </Text>
-                <Text style={[styles.productPrice, { color: colors.themePrimary }]}>
-                    ₹{parseFloat(product.price).toFixed(2)}
-                </Text>
-                {product.stock > 0 ? (
-                    <Text style={[styles.productStock, { color: '#4CAF50' }]}>
-                        In Stock
-                    </Text>
-                ) : (
-                    <Text style={[styles.productStock, { color: '#FF5252' }]}>
-                        Out of Stock
-                    </Text>
-                )}
-            </View>
-        </AppTouchableRipple>
-    );
-};
 
 export default CategoryDetailScreen;
 
@@ -520,49 +476,6 @@ const styles = StyleSheet.create({
         paddingRight: 16,
     },
 
-    // Product Card
-    productCard: {
-        width: 160,
-        borderRadius: 16,
-        overflow: 'hidden',
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-    },
-    productImageContainer: {
-        width: '100%',
-        height: 140,
-    },
-    productImage: {
-        width: '100%',
-        height: '100%',
-    },
-    productImagePlaceholder: {
-        width: '100%',
-        height: '100%',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    productInfo: {
-        padding: 12,
-    },
-    productName: {
-        fontSize: fonts.size.font14,
-        fontFamily: fonts.family.primaryBold,
-        marginBottom: 6,
-        minHeight: 36,
-    },
-    productPrice: {
-        fontSize: fonts.size.font16,
-        fontFamily: fonts.family.primaryBold,
-        marginBottom: 4,
-    },
-    productStock: {
-        fontSize: fonts.size.font11,
-        fontFamily: fonts.family.primaryMedium,
-    },
 
     // About Section
     aboutSection: {

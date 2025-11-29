@@ -1,11 +1,5 @@
-import React, { useState } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    Alert,
-    Platform,
-} from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, Text, StyleSheet, Alert, Platform } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import AppTextInput from '../../components/AppTextInput';
 import { useTheme } from '../../contexts/ThemeProvider';
@@ -18,13 +12,35 @@ import AppTouchableRipple from '../../components/AppTouchableRipple';
 import MainContainer from '../../container/MainContainer';
 import { useAuth } from '../../contexts/AuthContext';
 
-interface Props {
-    navigation: NativeStackNavigationProp<any>;
-    route: RouteProp<{ params: { mobile: string; token: string } }, 'params'>;
+type AuthStackParamList = {
+    [constant.routeName.registerScreen]: {
+        mobile: string;
+        token: string;
+    };
+};
+
+type RegisterScreenNavigationProp = NativeStackNavigationProp<
+    AuthStackParamList,
+    typeof constant.routeName.registerScreen
+>;
+
+type RegisterScreenRouteProp = RouteProp<
+    {
+        [constant.routeName.registerScreen]: {
+            mobile: string;
+            token: string;
+        };
+    },
+    typeof constant.routeName.registerScreen
+>;
+
+interface RegisterScreenProps {
+    navigation: RegisterScreenNavigationProp;
+    route: RegisterScreenRouteProp;
 }
 
 interface RegisterResponse {
-    success: boolean;
+    success?: boolean;
     message?: string;
     token?: string;
     user?: {
@@ -34,7 +50,7 @@ interface RegisterResponse {
     };
 }
 
-const RegisterScreen: React.FC<Props> = ({ navigation, route }) => {
+const RegisterScreen: React.FC<RegisterScreenProps> = ({ route }) => {
     const { mobile, token } = route.params;
     const [name, setName] = useState<string>('');
     const [email, setEmail] = useState<string>('');
@@ -43,12 +59,12 @@ const RegisterScreen: React.FC<Props> = ({ navigation, route }) => {
     const { login } = useAuth();
 
     const validateEmail = (email: string): boolean => {
-        if (!email) return true; // Email is optional
+        if (!email) return true;
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return emailRegex.test(email);
     };
 
-    const handleRegister = async () => {
+    const handleRegister = useCallback(async () => {
         if (!name.trim()) {
             Alert.alert('Validation Error', 'Please enter your name');
             return;
@@ -64,10 +80,8 @@ const RegisterScreen: React.FC<Props> = ({ navigation, route }) => {
             return;
         }
 
-        setLoading(true);
-
         try {
-            console.log('📝 Registering user:', name);
+            setLoading(true);
 
             const response: RegisterResponse = await ApiManager.post({
                 endpoint: constant.apiEndPoints.register,
@@ -79,8 +93,6 @@ const RegisterScreen: React.FC<Props> = ({ navigation, route }) => {
                 token: token,
             });
 
-            console.log('✅ Register Response:', response);
-
             if (response?.success || response?.token) {
                 const newToken = response?.token || token;
                 const userData = response?.user || {
@@ -88,24 +100,17 @@ const RegisterScreen: React.FC<Props> = ({ navigation, route }) => {
                     mobile: mobile,
                 };
 
-                // Use AuthContext login function
                 await login(newToken, userData);
-
-                console.log('✅ Registration successful! Navigation will happen automatically.');
 
                 Alert.alert('Success', response?.message || 'Registration successful!');
 
             } else {
-                console.error('❌ Registration failed:', response?.message);
                 Alert.alert(
                     'Registration Failed',
                     response?.message || 'Failed to register. Please try again.'
                 );
-                setLoading(false);
             }
         } catch (error: any) {
-            console.error('❌ Registration error:', error);
-
             let errorMessage = 'Something went wrong. Please try again.';
 
             if (error.message === 'No internet connection') {
@@ -115,9 +120,10 @@ const RegisterScreen: React.FC<Props> = ({ navigation, route }) => {
             }
 
             Alert.alert('Error', errorMessage);
+        } finally {
             setLoading(false);
         }
-    };
+    }, [name, email, mobile, token, login]);
 
     return (
         <MainContainer
@@ -184,14 +190,12 @@ const RegisterScreen: React.FC<Props> = ({ navigation, route }) => {
 
                     {/* Register Button */}
                     <AppTouchableRipple
-                        style={[
-                            styles.button,
-                            {
-                                backgroundColor: loading
-                                    ? colors.buttonDisabled
-                                    : colors.themePrimary,
-                            },
-                        ]}
+                        style={{
+                            ...styles.button,
+                            backgroundColor: loading
+                                ? colors.buttonDisabled
+                                : colors.themePrimary,
+                        }}
                         onPress={handleRegister}
                         disabled={loading}
                     >

@@ -55,7 +55,10 @@ export default {
         profile: 'profile',
         categoryDetail: "categoryDetail",
         productDetail: "productDetail",
-        mainTabs: "mainTabs"
+        mainTabs: "mainTabs",
+        addressList: "addressList",
+        addEditAddress: "addEditAddress",
+        wishlist: "wishlist"
     },
     // Response Codes
     responseCode: {

@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, RefreshControl, Image, TextInput, Animated } from 'react-native';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { View, Text, StyleSheet, FlatList, RefreshControl, TextInput, Animated } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -13,28 +13,32 @@ import ApiManager from '../../managers/ApiManager';
 import StorageManager from '../../managers/StorageManager';
 import constant from '../../utilities/constant';
 import { useCart } from '../../contexts/CardContext';
+import { useWishlist } from '../../contexts/WishlistContext';
 import { ProductDetailScreenProps } from './ProductDetailScreen';
+import { ProductGridItem, ProductListItem } from '../../components/listItems';
+import { useVoiceSearch } from '../../hooks/useVoiceSearch';
+import VoiceSearchButton from '../../components/VoiceSearchButton';
 
 export interface ProductListScreenProps {
     focusSearch?: boolean;
     initialQuery?: string;
 }
 
-interface Props {
+interface ProductListScreenNavigationProps {
     navigation: NativeStackNavigationProp<any>;
     route?: {
         params?: ProductListScreenProps;
     };
 }
 
-interface Category {
+export interface Category {
     id: number;
     name: string;
     description: string;
     image: string;
 }
 
-interface Product {
+export interface Product {
     id: number;
     category_id: number;
     name: string;
@@ -51,213 +55,12 @@ interface Product {
     category: Category;
 }
 
-const getStockStatus = (stock: number) => {
-    if (stock === 0) return { label: 'Out of Stock', color: '#FF5252', bgColor: '#FFEBEE' };
-    if (stock <= 5) return { label: 'Low Stock', color: '#FF9800', bgColor: '#FFF3E0' };
-    return { label: 'In Stock', color: '#4CAF50', bgColor: '#E8F5E9' };
-};
 
-const getImageUrl = (imagePath: string) => {
-    return `https://gayatriorganicfarm.com/storage/${imagePath}`;
-};
-
-// Grid Item Component
-const GridItem: React.FC<{
-    item: Product;
-    onPress: (product: Product) => void;
-    onAddToCart: (product: Product) => void;
-    isInCart: boolean;
-}> = ({ item, onPress, onAddToCart, isInCart }) => {
-    const colors = useTheme();
-    const stockStatus = getStockStatus(item.stock);
-    const [imageError, setImageError] = useState(false);
-
-    return (
-        <AppTouchableRipple
-            style={[styles.gridCard, { backgroundColor: colors.backgroundSecondary }]}
-            onPress={() => onPress(item)}
-        >
-            {/* Product Image */}
-            <View style={styles.gridImageContainer}>
-                {item.image1 && !imageError ? (
-                    <Image
-                        source={{ uri: getImageUrl(item.image1) }}
-                        style={styles.gridImage}
-                        resizeMode="cover"
-                        onError={() => setImageError(true)}
-                    />
-                ) : (
-                    <View style={[styles.gridImagePlaceholder, { backgroundColor: colors.themePrimaryLight }]}>
-                        <Icon name="image-off" size={32} color={colors.themePrimary} />
-                    </View>
-                )}
-
-                {/* Stock Badge */}
-                <View style={[styles.stockBadge, { backgroundColor: stockStatus.bgColor }]}>
-                    <Text style={[styles.stockBadgeText, { color: stockStatus.color }]}>
-                        {item.stock}
-                    </Text>
-                </View>
-
-                {/* Wishlist Button */}
-                <View style={[styles.wishlistBtn, { backgroundColor: 'rgba(255,255,255,0.9)' }]}>
-                    <Icon name="heart-outline" size={18} color={colors.themePrimary} />
-                </View>
-            </View>
-
-            {/* Product Info */}
-            <View style={styles.gridContent}>
-                {/* Category Tag */}
-                <View style={[styles.categoryTag, { backgroundColor: colors.themePrimaryLight }]}>
-                    <Text style={[styles.categoryTagText, { color: colors.themePrimary }]} numberOfLines={1}>
-                        {item.category.name}
-                    </Text>
-                </View>
-
-                {/* Product Name */}
-                <Text style={[styles.gridProductName, { color: colors.textPrimary }]} numberOfLines={2}>
-                    {item.name}
-                </Text>
-
-                {/* Stock Status */}
-                <View style={[styles.stockStatus, { backgroundColor: stockStatus.bgColor }]}>
-                    <Icon name="package-variant" size={12} color={stockStatus.color} />
-                    <Text style={[styles.stockStatusText, { color: stockStatus.color }]}>
-                        {stockStatus.label}
-                    </Text>
-                </View>
-
-                {/* Price and Cart */}
-                <View style={styles.gridFooter}>
-                    <View>
-                        <Text style={[styles.priceLabel, { color: colors.textLabel }]}>Price</Text>
-                        <Text style={[styles.gridPrice, { color: colors.themePrimary }]}>
-                            ₹{parseFloat(item.price).toFixed(2)}
-                        </Text>
-                    </View>
-                    <AppTouchableRipple
-                        style={[
-                            styles.cartButton,
-                            { backgroundColor: isInCart ? colors.themePrimary : colors.themePrimaryLight }
-                        ]}
-                        onPress={(e) => {
-                            e.stopPropagation();
-                            onAddToCart(item);
-                        }}
-                        disabled={item.stock === 0}
-                    >
-                        <Icon
-                            name={isInCart ? "check" : "cart-plus"}
-                            size={20}
-                            color={isInCart ? colors.white : colors.themePrimary}
-                        />
-                    </AppTouchableRipple>
-                </View>
-            </View>
-        </AppTouchableRipple>
-    );
-};
-
-// List Item Component
-const ListItem: React.FC<{
-    item: Product;
-    onPress: (product: Product) => void;
-    onAddToCart: (product: Product) => void;
-    isInCart: boolean;
-}> = ({ item, onPress, onAddToCart, isInCart }) => {
-    const colors = useTheme();
-    const stockStatus = getStockStatus(item.stock);
-    const [imageError, setImageError] = useState(false);
-
-    return (
-        <AppTouchableRipple
-            style={[styles.listCard, { backgroundColor: colors.backgroundSecondary }]}
-            onPress={() => onPress(item)}
-        >
-            <View style={styles.listContent}>
-                {/* Product Image */}
-                <View style={styles.listImageContainer}>
-                    {item.image1 && !imageError ? (
-                        <Image
-                            source={{ uri: getImageUrl(item.image1) }}
-                            style={styles.listImage}
-                            resizeMode="cover"
-                            onError={() => setImageError(true)}
-                        />
-                    ) : (
-                        <View style={[styles.listImagePlaceholder, { backgroundColor: colors.themePrimaryLight }]}>
-                            <Icon name="image-off" size={28} color={colors.themePrimary} />
-                        </View>
-                    )}
-
-                    {/* Stock Badge on Image */}
-                    <View style={[styles.listStockBadge, { backgroundColor: stockStatus.bgColor }]}>
-                        <Text style={[styles.listStockBadgeText, { color: stockStatus.color }]}>
-                            {item.stock}
-                        </Text>
-                    </View>
-                </View>
-
-                {/* Product Info */}
-                <View style={styles.listInfo}>
-                    <View style={[styles.categoryTag, { backgroundColor: colors.themePrimaryLight, alignSelf: 'flex-start' }]}>
-                        <Text style={[styles.categoryTagText, { color: colors.themePrimary }]} numberOfLines={1}>
-                            {item.category.name}
-                        </Text>
-                    </View>
-
-                    <Text style={[styles.listProductName, { color: colors.textPrimary }]} numberOfLines={1}>
-                        {item.name}
-                    </Text>
-
-                    <Text style={[styles.listDescription, { color: colors.textDescription }]} numberOfLines={2}>
-                        {item.description}
-                    </Text>
-
-                    <View style={styles.listFooter}>
-                        <View>
-                            <Text style={[styles.priceLabel, { color: colors.textLabel }]}>Price</Text>
-                            <Text style={[styles.listPrice, { color: colors.themePrimary }]}>
-                                ₹{parseFloat(item.price).toFixed(2)}
-                            </Text>
-                        </View>
-
-                        <View style={styles.listActions}>
-                            <View style={[styles.stockStatus, { backgroundColor: stockStatus.bgColor }]}>
-                                <Icon name="package-variant" size={12} color={stockStatus.color} />
-                                <Text style={[styles.stockStatusText, { color: stockStatus.color }]}>
-                                    {stockStatus.label}
-                                </Text>
-                            </View>
-                            <AppTouchableRipple
-                                style={[
-                                    styles.cartButton,
-                                    { backgroundColor: isInCart ? colors.themePrimary : colors.themePrimaryLight }
-                                ]}
-                                onPress={(e) => {
-                                    e.stopPropagation();
-                                    onAddToCart(item);
-                                }}
-                                disabled={item.stock === 0}
-                            >
-                                <Icon
-                                    name={isInCart ? "check" : "cart-plus"}
-                                    size={20}
-                                    color={isInCart ? colors.white : colors.themePrimary}
-                                />
-                            </AppTouchableRipple>
-                        </View>
-                    </View>
-                </View>
-            </View>
-        </AppTouchableRipple>
-    );
-};
-
-const ProductListScreen: React.FC<Props> = ({ navigation, route }) => {
+const ProductListScreen: React.FC<ProductListScreenNavigationProps> = ({ navigation, route }) => {
     const colors = useTheme();
     const insets = useSafeAreaInsets();
     const { addToCart, isInCart } = useCart();
+    const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
     const searchInputRef = useRef<TextInput>(null);
 
     const [products, setProducts] = useState<Product[]>([]);
@@ -270,29 +73,13 @@ const ProductListScreen: React.FC<Props> = ({ navigation, route }) => {
 
     // Animation for header
     const scrollY = useRef(new Animated.Value(0)).current;
-    const headerHeight = scrollY.interpolate({
+    const headerHeight = useMemo(() => scrollY.interpolate({
         inputRange: [0, 50],
         outputRange: [100, 80],
         extrapolate: 'clamp',
-    });
+    }), [scrollY]);
 
-    // Load products on screen focus
-    useFocusEffect(
-        useCallback(() => {
-            fetchProducts();
-        }, [])
-    );
-
-    // Focus search if coming from home
-    useEffect(() => {
-        if (route?.params?.focusSearch) {
-            setTimeout(() => {
-                searchInputRef.current?.focus();
-            }, 300);
-        }
-    }, [route?.params?.focusSearch]);
-
-    const fetchProducts = async (isRefresh = false) => {
+    const fetchProducts = useCallback(async (isRefresh = false) => {
         if (isRefresh) {
             setRefreshing(true);
         } else {
@@ -310,39 +97,52 @@ const ProductListScreen: React.FC<Props> = ({ navigation, route }) => {
 
             if (response?.status && response?.data && Array.isArray(response.data)) {
                 setProducts(response.data);
-                applyFilters(response.data, searchQuery, selectedFilter);
             } else if (response?.data && Array.isArray(response.data)) {
                 setProducts(response.data);
-                applyFilters(response.data, searchQuery, selectedFilter);
             } else {
                 setProducts([]);
-                setFilteredProducts([]);
             }
         } catch (error: any) {
             console.error('❌ Fetch Products Error:', error);
             setProducts([]);
-            setFilteredProducts([]);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, []);
 
-    const applyFilters = (productList: Product[], query: string, filter: typeof selectedFilter) => {
-        let filtered = [...productList];
+    // Load products on screen focus
+    useFocusEffect(
+        useCallback(() => {
+            fetchProducts();
+        }, [fetchProducts])
+    );
+
+    // Focus search if coming from home
+    useEffect(() => {
+        if (route?.params?.focusSearch) {
+            setTimeout(() => {
+                searchInputRef.current?.focus();
+            }, 300);
+        }
+    }, [route?.params?.focusSearch]);
+
+    // Apply filters when products, search query, or filter changes
+    useEffect(() => {
+        let filtered = [...products];
 
         // Apply search filter
-        if (query.trim() !== '') {
+        if (searchQuery.trim() !== '') {
             filtered = filtered.filter(
                 (product) =>
-                    product.name.toLowerCase().includes(query.toLowerCase()) ||
-                    product.category.name.toLowerCase().includes(query.toLowerCase()) ||
-                    product.description.toLowerCase().includes(query.toLowerCase())
+                    product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    product.category.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    product.description.toLowerCase().includes(searchQuery.toLowerCase())
             );
         }
 
         // Apply stock filter
-        switch (filter) {
+        switch (selectedFilter) {
             case 'inStock':
                 filtered = filtered.filter(p => p.stock > 5);
                 break;
@@ -355,30 +155,56 @@ const ProductListScreen: React.FC<Props> = ({ navigation, route }) => {
         }
 
         setFilteredProducts(filtered);
-    };
+    }, [products, searchQuery, selectedFilter]);
 
-    const handleSearch = (query: string) => {
+    const handleSearch = useCallback((query: string) => {
         setSearchQuery(query);
-        applyFilters(products, query, selectedFilter);
-    };
+    }, []);
 
-    const handleFilterChange = (filter: typeof selectedFilter) => {
+    const handleVoiceResult = useCallback((text: string) => {
+        console.log('Voice result received:', text);
+        setSearchQuery(text);
+        // Optionally focus the input after voice search
+        setTimeout(() => {
+            searchInputRef.current?.focus();
+        }, 100);
+    }, []);
+
+    const handleVoiceError = useCallback((error: Error) => {
+        console.error('Voice search error:', error);
+    }, []);
+
+    const { isListening, isAvailable, startListening, stopListening } = useVoiceSearch({
+        onResult: handleVoiceResult,
+        onError: handleVoiceError,
+        language: 'en-US',
+    });
+
+    const handleVoiceButtonPress = useCallback(() => {
+        console.log('Voice button pressed, isListening:', isListening);
+        if (isListening) {
+            stopListening();
+        } else {
+            startListening();
+        }
+    }, [isListening, startListening, stopListening]);
+
+    const handleFilterChange = useCallback((filter: typeof selectedFilter) => {
         setSelectedFilter(filter);
-        applyFilters(products, searchQuery, filter);
-    };
+    }, []);
 
-    const handleRefresh = () => {
+    const handleRefresh = useCallback(() => {
         fetchProducts(true);
-    };
+    }, [fetchProducts]);
 
-    const handleProductPress = (product: Product) => {
+    const handleProductPress = useCallback((product: Product) => {
         const propsToSend: ProductDetailScreenProps = {
             productId: product.id
         };
         navigation.navigate(constant.routeName.productDetail, propsToSend);
-    };
+    }, [navigation]);
 
-    const handleAddToCart = (product: Product) => {
+    const handleAddToCart = useCallback((product: Product) => {
         if (product.stock === 0) return;
 
         addToCart({
@@ -389,25 +215,53 @@ const ProductListScreen: React.FC<Props> = ({ navigation, route }) => {
             unit: 'pc',
             quantity: 1
         });
-    };
+    }, [addToCart]);
 
-    const renderGridItem = ({ item }: { item: Product }) => (
-        <GridItem
+    const handleToggleFavorite = useCallback((product: Product) => {
+        if (isInWishlist(product.id)) {
+            removeFromWishlist(product.id);
+        } else {
+            addToWishlist({
+                id: product.id,
+                name: product.name,
+                price: product.price,
+                image1: product.image1,
+                category_id: product.category_id,
+                category: product.category,
+                stock: product.stock,
+                description: product.description,
+            });
+        }
+    }, [isInWishlist, addToWishlist, removeFromWishlist]);
+
+    const renderGridItem = useCallback(({ item }: { item: Product }) => (
+        <ProductGridItem
             item={item}
             onPress={handleProductPress}
             onAddToCart={handleAddToCart}
             isInCart={isInCart(item.id)}
+            colors={colors}
+            onToggleFavorite={handleToggleFavorite}
+            isFavorite={isInWishlist(item.id)}
         />
-    );
+    ), [handleProductPress, handleAddToCart, isInCart, colors, handleToggleFavorite, isInWishlist]);
 
-    const renderListItem = ({ item }: { item: Product }) => (
-        <ListItem
+    const renderListItem = useCallback(({ item }: { item: Product }) => (
+        <ProductListItem
             item={item}
             onPress={handleProductPress}
             onAddToCart={handleAddToCart}
             isInCart={isInCart(item.id)}
+            colors={colors}
+            onToggleFavorite={handleToggleFavorite}
+            isFavorite={isInWishlist(item.id)}
         />
-    );
+    ), [handleProductPress, handleAddToCart, isInCart, colors, handleToggleFavorite, isInWishlist]);
+
+    const listContentStyle = useMemo(() => ({
+        ...styles.listContainer,
+        paddingBottom: 100 + insets.bottom
+    }), [insets.bottom]);
 
     const filters = [
         { key: 'all', label: 'All', icon: 'view-grid' },
@@ -467,6 +321,14 @@ const ProductListScreen: React.FC<Props> = ({ navigation, route }) => {
                         value={searchQuery}
                         onChangeText={handleSearch}
                     />
+                    <VoiceSearchButton
+                        isListening={isListening}
+                        isAvailable={isAvailable}
+                        onPress={handleVoiceButtonPress}
+                        colors={colors}
+                        size={20}
+                        showLabel={true}
+                    />
                     {searchQuery.length > 0 && (
                         <AppTouchableRipple onPress={() => handleSearch('')}>
                             <Icon name="close-circle" size={20} color={colors.themePrimary} />
@@ -481,14 +343,12 @@ const ProductListScreen: React.FC<Props> = ({ navigation, route }) => {
                         {filters.map((filter) => (
                             <AppTouchableRipple
                                 key={filter.key}
-                                style={[
-                                    styles.filterChip,
-                                    {
-                                        backgroundColor: selectedFilter === filter.key
-                                            ? colors.themePrimary
-                                            : colors.backgroundSecondary
-                                    }
-                                ]}
+                                style={{
+                                    ...styles.filterChip,
+                                    backgroundColor: selectedFilter === filter.key
+                                        ? colors.themePrimary
+                                        : colors.backgroundSecondary
+                                }}
                                 onPress={() => handleFilterChange(filter.key)}
                             >
                                 <Icon
@@ -523,12 +383,9 @@ const ProductListScreen: React.FC<Props> = ({ navigation, route }) => {
                         data={filteredProducts}
                         renderItem={viewMode === 'grid' ? renderGridItem : renderListItem}
                         keyExtractor={(item) => item.id.toString()}
-                        numColumns={viewMode === 'grid' ? 2 : 1}
+                        numColumns={viewMode === 'grid' ? 3 : 1}
                         key={viewMode}
-                        contentContainerStyle={{
-                            ...styles.listContainer,
-                            paddingBottom: 100 + insets.bottom
-                        }}
+                        contentContainerStyle={listContentStyle}
                         columnWrapperStyle={viewMode === 'grid' ? styles.gridRow : undefined}
                         showsVerticalScrollIndicator={false}
                         onScroll={Animated.event(
@@ -641,197 +498,11 @@ const styles = StyleSheet.create({
         fontFamily: fonts.family.primaryMedium,
     },
     listContainer: {
-        padding: 16,
+        padding: 12,
     },
     // Grid View Styles
     gridRow: {
-        gap: 12,
-    },
-    gridCard: {
-        flex: 1,
-        borderRadius: 16,
-        overflow: 'hidden',
-        marginBottom: 12,
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.12,
-        shadowRadius: 6,
-    },
-    gridImageContainer: {
-        width: '100%',
-        height: 160,
-        position: 'relative',
-    },
-    gridImage: {
-        width: '100%',
-        height: '100%',
-    },
-    gridImagePlaceholder: {
-        width: '100%',
-        height: '100%',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    stockBadge: {
-        position: 'absolute',
-        top: 8,
-        right: 8,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 12,
-        minWidth: 32,
-        alignItems: 'center',
-    },
-    stockBadgeText: {
-        fontSize: fonts.size.font11,
-        fontFamily: fonts.family.primaryBold,
-    },
-    wishlistBtn: {
-        position: 'absolute',
-        top: 8,
-        left: 8,
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    gridContent: {
-        padding: 12,
-    },
-    categoryTag: {
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 6,
-        marginBottom: 8,
-        alignSelf: 'flex-start',
-    },
-    categoryTagText: {
-        fontSize: fonts.size.font10,
-        fontFamily: fonts.family.primaryBold,
-        textTransform: 'uppercase',
-    },
-    gridProductName: {
-        fontSize: fonts.size.font14,
-        fontFamily: fonts.family.primaryBold,
-        marginBottom: 8,
-        minHeight: 36,
-        lineHeight: 18,
-    },
-    stockStatus: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        alignSelf: 'flex-start',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 12,
-        gap: 4,
-        marginBottom: 8,
-    },
-    stockStatusText: {
-        fontSize: fonts.size.font10,
-        fontFamily: fonts.family.primaryBold,
-    },
-    gridFooter: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-end',
-    },
-    priceLabel: {
-        fontSize: fonts.size.font10,
-        fontFamily: fonts.family.secondaryRegular,
-        marginBottom: 2,
-    },
-    gridPrice: {
-        fontSize: fonts.size.font18,
-        fontFamily: fonts.family.primaryBold,
-    },
-    cartButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-    },
-
-    // List View Styles
-    listCard: {
-        borderRadius: 16,
-        padding: 12,
-        marginBottom: 12,
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-    },
-    listContent: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    listImageContainer: {
-        width: 100,
-        height: 100,
-        borderRadius: 12,
-        overflow: 'hidden',
-        position: 'relative',
-    },
-    listImage: {
-        width: '100%',
-        height: '100%',
-    },
-    listImagePlaceholder: {
-        width: '100%',
-        height: '100%',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    listStockBadge: {
-        position: 'absolute',
-        top: 6,
-        right: 6,
-        paddingHorizontal: 6,
-        paddingVertical: 3,
-        borderRadius: 10,
-        minWidth: 24,
-        alignItems: 'center',
-    },
-    listStockBadgeText: {
-        fontSize: fonts.size.font10,
-        fontFamily: fonts.family.primaryBold,
-    },
-    listInfo: {
-        flex: 1,
-        gap: 4,
-    },
-    listProductName: {
-        fontSize: fonts.size.font16,
-        fontFamily: fonts.family.primaryBold,
-    },
-    listDescription: {
-        fontSize: fonts.size.font12,
-        fontFamily: fonts.family.secondaryRegular,
-        lineHeight: 16,
-    },
-    listFooter: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-end',
-        marginTop: 'auto',
-    },
-    listPrice: {
-        fontSize: fonts.size.font18,
-        fontFamily: fonts.family.primaryBold,
-    },
-    listActions: {
-        flexDirection: 'row',
-        alignItems: 'center',
         gap: 8,
+        justifyContent: 'space-between',
     },
 });

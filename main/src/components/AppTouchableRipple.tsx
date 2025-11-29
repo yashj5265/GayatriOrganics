@@ -1,9 +1,8 @@
-import React, { memo, useCallback, useEffect, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useRef, useState, useMemo } from "react";
 import {
     Animated,
     Dimensions,
     GestureResponderEvent,
-    SafeAreaView,
     StyleSheet,
     TouchableWithoutFeedback,
     TouchableWithoutFeedbackProps,
@@ -26,7 +25,7 @@ interface RippleProps {
     canRemove: boolean;
 }
 
-const Ripple: React.FC<RippleProps> = ({
+const Ripple: React.FC<RippleProps> = memo(({
     onRemove,
     id,
     color,
@@ -44,7 +43,7 @@ const Ripple: React.FC<RippleProps> = ({
             duration: ANIMATION_DURATION,
             useNativeDriver: true,
         }).start();
-    }, []);
+    }, [scale]);
 
     useEffect(() => {
         if (canRemove) {
@@ -53,44 +52,47 @@ const Ripple: React.FC<RippleProps> = ({
                 duration: ANIMATION_DURATION,
                 useNativeDriver: true,
             }).start(() => {
-                // onRemove(id);
                 setTimeout(() => onRemove(id), 0);
             });
         }
-    }, [canRemove]);
+    }, [canRemove, opacityValue, onRemove, id]);
+
+    const rippleStyle = useMemo(() => [
+        styles.ripple,
+        {
+            backgroundColor: color,
+            left: x - INITIAL_RIPPLE_SIZE / 2,
+            top: y - INITIAL_RIPPLE_SIZE / 2,
+            transform: [{ scale }],
+            opacity: opacityValue,
+        },
+    ], [color, x, y, scale, opacityValue]);
 
     return (
-        <Animated.View
-            style={[
-                styles.ripple,
-                {
-                    backgroundColor: color,
-                    left: x - INITIAL_RIPPLE_SIZE / 2,
-                    top: y - INITIAL_RIPPLE_SIZE / 2,
-                    transform: [{ scale }],
-                    opacity: opacityValue,
-                },
-            ]}
-        />
+        <Animated.View style={rippleStyle} />
     );
-};
+});
 
-interface Props extends TouchableWithoutFeedbackProps {
+export interface AppTouchableRippleProps extends TouchableWithoutFeedbackProps {
     style?: ViewStyle;
     rippleColor?: string;
     rippleOpacity?: number;
     ripplePosition?: "foreground" | "background";
 }
 
-const AppTouchableRipple: React.FC<Props> = memo(
+const DEFAULT_RIPPLE_COLOR = "#000";
+const DEFAULT_RIPPLE_OPACITY = 0.1;
+const DEFAULT_RIPPLE_POSITION: "foreground" = "foreground";
+
+const AppTouchableRipple: React.FC<AppTouchableRippleProps> = memo(
     ({
         style,
         children,
-        rippleColor = "#000",
-        rippleOpacity = 0.1,
-        ripplePosition = "foreground",
-        onPressIn = () => { },
-        onPressOut = () => { },
+        rippleColor = DEFAULT_RIPPLE_COLOR,
+        rippleOpacity = DEFAULT_RIPPLE_OPACITY,
+        ripplePosition = DEFAULT_RIPPLE_POSITION,
+        onPressIn,
+        onPressOut,
         ...rest
     }) => {
         const [ripples, setRipples] = useState<
@@ -98,7 +100,7 @@ const AppTouchableRipple: React.FC<Props> = memo(
         >([]);
         const [pressedOut, setPressedOut] = useState(true);
 
-        const handlePressIn = (e: GestureResponderEvent) => {
+        const handlePressIn = useCallback((e: GestureResponderEvent) => {
             const { locationX, locationY } = e.nativeEvent;
 
             requestAnimationFrame(() => {
@@ -113,17 +115,21 @@ const AppTouchableRipple: React.FC<Props> = memo(
             });
 
             setPressedOut(false);
-            onPressIn(e);
-        };
+            onPressIn?.(e);
+        }, [onPressIn]);
 
-        const handlePressOut = (e: GestureResponderEvent) => {
+        const handlePressOut = useCallback((e: GestureResponderEvent) => {
             setPressedOut(true);
-            onPressOut(e);
-        };
+            onPressOut?.(e);
+        }, [onPressOut]);
 
-        const handleRemove = useCallback((id) => {
+        const handleRemove = useCallback((id: string) => {
             setRipples((prev) => prev.filter((ripple) => ripple.id !== id));
         }, []);
+
+        const containerStyle = useMemo(() => [style, styles.container], [style]);
+
+        const showForeground = ripplePosition === "foreground";
 
         return (
             <TouchableWithoutFeedback
@@ -131,8 +137,8 @@ const AppTouchableRipple: React.FC<Props> = memo(
                 onPressIn={handlePressIn}
                 onPressOut={handlePressOut}
             >
-                <View pointerEvents="box-only" style={[style, styles.container]}>
-                    {ripplePosition === "foreground" ? children : null}
+                <View pointerEvents="box-only" style={containerStyle}>
+                    {showForeground && children}
                     {ripples.map((r, i) => (
                         <Ripple
                             key={r.id}
@@ -145,7 +151,7 @@ const AppTouchableRipple: React.FC<Props> = memo(
                             onRemove={handleRemove}
                         />
                     ))}
-                    {ripplePosition === "background" ? children : null}
+                    {!showForeground && children}
                 </View>
             </TouchableWithoutFeedback>
         );

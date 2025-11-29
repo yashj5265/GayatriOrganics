@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import {
     View,
     Text,
@@ -11,6 +11,7 @@ import {
     Alert
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import MainContainer from '../../container/MainContainer';
 import { useTheme } from '../../contexts/ThemeProvider';
@@ -20,27 +21,21 @@ import ApiManager from '../../managers/ApiManager';
 import StorageManager from '../../managers/StorageManager';
 import constant from '../../utilities/constant';
 import { useCart } from '../../contexts/CardContext';
+import { useWishlist } from '../../contexts/WishlistContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppColors } from '../../styles/colors';
+import { Category } from './ProductListScreen';
 
 export interface ProductDetailScreenProps {
     productId: number;
 }
 
-interface Props {
+interface ProductDetailScreenNavigationProps {
     navigation: NativeStackNavigationProp<any>;
-    route: {
-        params: ProductDetailScreenProps;
-    };
+    route: RouteProp<{ params: ProductDetailScreenProps }, 'params'>;
 }
 
-interface Category {
-    id: number;
-    name: string;
-    description: string;
-    image: string;
-}
-
-interface Product {
+export interface Product {
     id: number;
     category_id: number;
     name: string;
@@ -66,39 +61,23 @@ const getStockStatus = (stock: number) => {
     return { label: 'In Stock', color: '#4CAF50', bgColor: '#E8F5E9', icon: 'check-circle' };
 };
 
-const getImageUrl = (imagePath: string) => {
-    return `https://gayatriorganicfarm.com/storage/${imagePath}`;
-};
+const getImageUrl = (imagePath: string) => `https://gayatriorganicfarm.com/storage/${imagePath}`;
 
-const ProductDetailScreen: React.FC<Props> = ({ navigation, route }) => {
+const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ navigation, route }) => {
     const colors = useTheme();
     const insets = useSafeAreaInsets();
 
     const { productId } = route.params;
     const { addToCart, isInCart, updateQuantity, getCartItem } = useCart();
+    const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
 
     const [product, setProduct] = useState<Product | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [quantity, setQuantity] = useState<number>(1);
-    const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
-    const [isFavorite, setIsFavorite] = useState<boolean>(false);
     const scrollX = useRef(new Animated.Value(0)).current;
     const scrollViewRef = useRef<ScrollView>(null);
 
-    useEffect(() => {
-        fetchProductDetail();
-    }, [productId]);
-
-    useEffect(() => {
-        if (product && isInCart(product.id)) {
-            const cartItem = getCartItem(product.id);
-            if (cartItem) {
-                setQuantity(cartItem.quantity || 1);
-            }
-        }
-    }, [product]);
-
-    const fetchProductDetail = async () => {
+    const fetchProductDetail = useCallback(async () => {
         setLoading(true);
         try {
             const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
@@ -108,7 +87,7 @@ const ProductDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 token: token || undefined,
                 showError: true,
             });
-            console.log(response)
+
             if (response?.status && response?.data) {
                 setProduct(response.data);
             } else if (response?.data) {
@@ -124,9 +103,22 @@ const ProductDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [productId, navigation]);
 
-    const handleAddToCart = () => {
+    useEffect(() => {
+        fetchProductDetail();
+    }, [fetchProductDetail]);
+
+    useEffect(() => {
+        if (product && isInCart(product.id)) {
+            const cartItem = getCartItem(product.id);
+            if (cartItem) {
+                setQuantity(cartItem.quantity || 1);
+            }
+        }
+    }, [product, isInCart, getCartItem]);
+
+    const handleAddToCart = useCallback(() => {
         if (!product || product.stock === 0) return;
 
         if (isInCart(product.id)) {
@@ -160,24 +152,54 @@ const ProductDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 ]
             );
         }
-    };
+    }, [product, quantity, isInCart, updateQuantity, addToCart, navigation]);
 
-    const handleQuantityChange = (change: number) => {
+    const handleQuantityChange = useCallback((change: number) => {
         if (!product) return;
         const newQuantity = quantity + change;
         if (newQuantity >= 1 && newQuantity <= product.stock) {
             setQuantity(newQuantity);
         }
-    };
+    }, [product, quantity]);
 
-    const getProductImages = () => {
+    const productImages = useMemo(() => {
         if (!product) return [];
-        const images = [product.image1, product.image2, product.image3, product.image4, product.image5]
-            .filter(img => img !== null);
-        return images as string[];
-    };
+        return [product.image1, product.image2, product.image3, product.image4, product.image5]
+            .filter((img): img is string => img !== null);
+    }, [product]);
 
-    if (loading || !product) {
+    const stockStatus = useMemo(() => product ? getStockStatus(product.stock) : null, [product]);
+    const inCart = useMemo(() => product ? isInCart(product.id) : false, [product, isInCart]);
+    const isFavorite = useMemo(() => product ? isInWishlist(product.id) : false, [product, isInWishlist]);
+    const totalPrice = useMemo(() => {
+        if (!product) return 0;
+        return parseFloat(product.price) * quantity;
+    }, [product, quantity]);
+
+    const handleToggleFavorite = useCallback(() => {
+        if (!product) return;
+        if (isInWishlist(product.id)) {
+            removeFromWishlist(product.id);
+        } else {
+            addToWishlist({
+                id: product.id,
+                name: product.name,
+                price: product.price,
+                image1: product.image1,
+                category_id: product.category_id,
+                category: product.category,
+                stock: product.stock,
+                description: product.description,
+            });
+        }
+    }, [product, isInWishlist, addToWishlist, removeFromWishlist]);
+
+    const scrollContentStyle = useMemo(() => ({
+        ...styles.scrollContent,
+        paddingBottom: 100 + insets.bottom
+    }), [insets.bottom]);
+
+    if (loading || !product || !stockStatus) {
         return (
             <MainContainer
                 statusBarColor="transparent"
@@ -190,10 +212,6 @@ const ProductDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         );
     }
 
-    const stockStatus = getStockStatus(product.stock);
-    const images = getProductImages();
-    const inCart = isInCart(product.id);
-
     return (
         <MainContainer
             statusBarColor="transparent"
@@ -205,9 +223,8 @@ const ProductDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                     ref={scrollViewRef}
                     style={styles.scrollView}
                     showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{ ...styles.scrollContent, paddingBottom: 100 + insets.bottom }}
+                    contentContainerStyle={scrollContentStyle}
                 >
-                    {/* Image Carousel */}
                     <View style={styles.imageCarouselContainer}>
                         <ScrollView
                             horizontal
@@ -219,15 +236,14 @@ const ProductDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                             )}
                             scrollEventThrottle={16}
                         >
-                            {images.map((image, index) => (
+                            {productImages.map((image, index) => (
                                 <ImageCard key={index} imageUrl={getImageUrl(image)} colors={colors} />
                             ))}
                         </ScrollView>
 
-                        {/* Image Indicators */}
-                        {images.length > 1 && (
+                        {productImages.length > 1 && (
                             <View style={styles.imageIndicators}>
-                                {images.map((_, index) => {
+                                {productImages.map((_, index) => {
                                     const inputRange = [
                                         (index - 1) * width,
                                         index * width,
@@ -264,15 +280,15 @@ const ProductDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                         {/* Floating Buttons */}
                         <View style={styles.floatingButtons}>
                             <AppTouchableRipple
-                                style={[styles.floatingButton, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
+                                style={{ ...styles.floatingButton, backgroundColor: 'rgba(0,0,0,0.5)' }}
                                 onPress={() => navigation.goBack()}
                             >
                                 <Icon name="arrow-left" size={24} color="#FFFFFF" />
                             </AppTouchableRipple>
 
                             <AppTouchableRipple
-                                style={[styles.floatingButton, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
-                                onPress={() => setIsFavorite(!isFavorite)}
+                                style={{ ...styles.floatingButton, backgroundColor: 'rgba(0,0,0,0.5)' }}
+                                onPress={handleToggleFavorite}
                             >
                                 <Icon
                                     name={isFavorite ? "heart" : "heart-outline"}
@@ -330,10 +346,10 @@ const ProductDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                                 <Text style={[styles.quantityLabel, { color: colors.textLabel }]}>Quantity</Text>
                                 <View style={styles.quantityControls}>
                                     <AppTouchableRipple
-                                        style={[
-                                            styles.quantityButton,
-                                            { backgroundColor: colors.themePrimaryLight }
-                                        ]}
+                                        style={{
+                                            ...styles.quantityButton,
+                                            backgroundColor: colors.themePrimaryLight
+                                        }}
                                         onPress={() => handleQuantityChange(-1)}
                                         disabled={quantity <= 1}
                                     >
@@ -345,10 +361,10 @@ const ProductDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                                     </Text>
 
                                     <AppTouchableRipple
-                                        style={[
-                                            styles.quantityButton,
-                                            { backgroundColor: colors.themePrimaryLight }
-                                        ]}
+                                        style={{
+                                            ...styles.quantityButton,
+                                            backgroundColor: colors.themePrimaryLight
+                                        }}
                                         onPress={() => handleQuantityChange(1)}
                                         disabled={quantity >= product.stock}
                                     >
@@ -365,10 +381,12 @@ const ProductDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                                     Total Amount
                                 </Text>
                                 <Text style={[styles.totalPrice, { color: colors.themePrimary }]}>
-                                    ₹{(parseFloat(product.price) * quantity).toFixed(2)}
+                                    ₹{totalPrice.toFixed(2)}
                                 </Text>
                             </View>
-                            <Icon name="calculator" size={32} color={colors.themePrimary} opacity={0.3} />
+                            <View style={{ opacity: 0.3 }}>
+                                <Icon name="calculator" size={32} color={colors.themePrimary} />
+                            </View>
                         </View>
 
                         {/* Description */}
@@ -451,21 +469,19 @@ const ProductDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                                 Total Price
                             </Text>
                             <Text style={[styles.bottomBarPrice, { color: colors.themePrimary }]}>
-                                ₹{(parseFloat(product.price) * quantity).toFixed(2)}
+                                ₹{totalPrice.toFixed(2)}
                             </Text>
                         </View>
 
                         <AppTouchableRipple
-                            style={[
-                                styles.addToCartButton,
-                                {
-                                    backgroundColor: product.stock === 0
-                                        ? colors.textLabel
-                                        : inCart
-                                            ? colors.themePrimary
-                                            : colors.themePrimary
-                                }
-                            ]}
+                            style={{
+                                ...styles.addToCartButton,
+                                backgroundColor: product.stock === 0
+                                    ? colors.textLabel
+                                    : inCart
+                                        ? colors.themePrimary
+                                        : colors.themePrimary
+                            }}
                             onPress={handleAddToCart}
                             disabled={product.stock === 0}
                         >
@@ -490,8 +506,17 @@ const ProductDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 };
 
 // Image Card Component
-const ImageCard: React.FC<{ imageUrl: string; colors: any }> = ({ imageUrl, colors }) => {
+interface ImageCardProps {
+    imageUrl: string;
+    colors: AppColors;
+}
+
+const ImageCard: React.FC<ImageCardProps> = memo(({ imageUrl, colors }) => {
     const [imageError, setImageError] = useState(false);
+
+    const handleImageError = useCallback(() => {
+        setImageError(true);
+    }, []);
 
     return (
         <View style={styles.imageCard}>
@@ -500,7 +525,7 @@ const ImageCard: React.FC<{ imageUrl: string; colors: any }> = ({ imageUrl, colo
                     source={{ uri: imageUrl }}
                     style={styles.productImage}
                     resizeMode="cover"
-                    onError={() => setImageError(true)}
+                    onError={handleImageError}
                 />
             ) : (
                 <View style={[styles.imagePlaceholder, { backgroundColor: colors.themePrimaryLight }]}>
@@ -509,15 +534,17 @@ const ImageCard: React.FC<{ imageUrl: string; colors: any }> = ({ imageUrl, colo
             )}
         </View>
     );
-};
+});
 
 // Feature Item Component
-const FeatureItem: React.FC<{
+interface FeatureItemProps {
     icon: string;
     title: string;
     description: string;
-    colors: any;
-}> = ({ icon, title, description, colors }) => {
+    colors: AppColors;
+}
+
+const FeatureItem: React.FC<FeatureItemProps> = memo(({ icon, title, description, colors }) => {
     return (
         <View style={[styles.featureItem, { backgroundColor: colors.backgroundSecondary }]}>
             <View style={[styles.featureIcon, { backgroundColor: colors.themePrimaryLight }]}>
@@ -533,7 +560,7 @@ const FeatureItem: React.FC<{
             </View>
         </View>
     );
-};
+});
 
 export default ProductDetailScreen;
 
@@ -656,7 +683,7 @@ const styles = StyleSheet.create({
         marginBottom: 4,
     },
     price: {
-        fontSize: fonts.size.font32,
+        fontSize: fonts.size.font30,
         fontFamily: fonts.family.primaryBold,
         marginBottom: 4,
     },
