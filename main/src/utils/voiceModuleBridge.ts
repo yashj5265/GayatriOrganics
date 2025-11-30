@@ -195,11 +195,12 @@ function createVoiceWrapper(nativeModule: any): any {
             });
         },
 
-        // Remove all listeners
+        // Remove all listeners (but keep the DeviceEventEmitter listeners active)
+        // This is called when a component unmounts, but we don't want to remove
+        // the DeviceEventEmitter listeners since other components might be using them
         removeAllListeners() {
-            listeners.forEach(listener => listener.remove());
-            listeners.length = 0;
-            // Clear event handlers
+            // Only clear the event handlers, don't remove DeviceEventEmitter listeners
+            // The DeviceEventEmitter listeners stay active for other components
             this.onSpeechStart = undefined;
             this.onSpeechEnd = undefined;
             this.onSpeechResults = undefined;
@@ -207,6 +208,7 @@ function createVoiceWrapper(nativeModule: any): any {
             this.onSpeechPartialResults = undefined;
             this.onSpeechRecognized = undefined;
             this.onSpeechVolumeChanged = undefined;
+            console.log('[VoiceBridge] Event handlers cleared (DeviceEventEmitter listeners remain active)');
         },
 
         // Check if recognizing

@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CategoryCard } from '../../components/listItems';
 import { useVoiceSearch } from '../../hooks/useVoiceSearch';
 import VoiceSearchButton from '../../components/VoiceSearchButton';
+import VoiceSearchOverlay from '../../popups/VoiceSearchOverlay';
 
 interface CategoriesScreenProps {
     navigation: NativeStackNavigationProp<any>;
@@ -122,6 +123,18 @@ const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ navigation }) => {
         language: 'en-US',
     });
 
+    // Stop listening when screen loses focus
+    useFocusEffect(
+        useCallback(() => {
+            return () => {
+                // Cleanup: stop listening when screen loses focus
+                if (isListening) {
+                    stopListening();
+                }
+            };
+        }, [isListening, stopListening])
+    );
+
     const handleVoiceButtonPress = useCallback(() => {
         console.log('Voice button pressed, isListening:', isListening);
         if (isListening) {
@@ -227,6 +240,15 @@ const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ navigation }) => {
                     />
                 )}
             </View>
+
+            {/* Voice Search Overlay */}
+            <VoiceSearchOverlay
+                visible={isListening}
+                isListening={isListening}
+                language="English (United States)"
+                colors={colors}
+                onClose={stopListening}
+            />
         </MainContainer>
     );
 };
@@ -262,7 +284,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderRadius: 12,
         paddingHorizontal: 16,
-        paddingVertical: 12,
+        paddingVertical: 5,
         gap: 12,
     },
     searchInput: {

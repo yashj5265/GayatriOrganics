@@ -18,6 +18,7 @@ import { ProductDetailScreenProps } from './ProductDetailScreen';
 import { ProductGridItem, ProductListItem } from '../../components/listItems';
 import { useVoiceSearch } from '../../hooks/useVoiceSearch';
 import VoiceSearchButton from '../../components/VoiceSearchButton';
+import VoiceSearchOverlay from '../../popups/VoiceSearchOverlay';
 
 export interface ProductListScreenProps {
     focusSearch?: boolean;
@@ -179,6 +180,18 @@ const ProductListScreen: React.FC<ProductListScreenNavigationProps> = ({ navigat
         onError: handleVoiceError,
         language: 'en-US',
     });
+
+    // Stop listening when screen loses focus
+    useFocusEffect(
+        useCallback(() => {
+            return () => {
+                // Cleanup: stop listening when screen loses focus
+                if (isListening) {
+                    stopListening();
+                }
+            };
+        }, [isListening, stopListening])
+    );
 
     const handleVoiceButtonPress = useCallback(() => {
         console.log('Voice button pressed, isListening:', isListening);
@@ -404,6 +417,15 @@ const ProductListScreen: React.FC<ProductListScreenNavigationProps> = ({ navigat
                     />
                 )}
             </View>
+
+            {/* Voice Search Overlay */}
+            <VoiceSearchOverlay
+                visible={isListening}
+                isListening={isListening}
+                language="English (United States)"
+                colors={colors}
+                onClose={stopListening}
+            />
         </MainContainer>
     );
 };

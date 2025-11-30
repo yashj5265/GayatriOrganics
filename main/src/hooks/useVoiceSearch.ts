@@ -130,17 +130,25 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
 
         return () => {
             if (isInitialized.current && voiceModule) {
-                // Clean up listeners
+                // Stop listening if active
+                if (isListening) {
+                    voiceModule.stop().catch((err: any) => {
+                        console.warn('[useVoiceSearch] Error stopping Voice on cleanup:', err);
+                    });
+                }
+                
+                // Clean up listeners (but don't destroy the module - other instances might be using it)
                 if (voiceModule.removeAllListeners && typeof voiceModule.removeAllListeners === 'function') {
                     voiceModule.removeAllListeners();
                 }
-
-                // Destroy the module
-                if (voiceModule.destroy && typeof voiceModule.destroy === 'function') {
-                    voiceModule.destroy().catch((err: any) => {
-                        console.warn('[useVoiceSearch] Error cleaning up Voice:', err);
-                    });
-                }
+                
+                // Clear event handlers
+                voiceModule.onSpeechStart = undefined;
+                voiceModule.onSpeechEnd = undefined;
+                voiceModule.onSpeechResults = undefined;
+                voiceModule.onSpeechError = undefined;
+                voiceModule.onSpeechPartialResults = undefined;
+                
                 isInitialized.current = false;
             }
         };

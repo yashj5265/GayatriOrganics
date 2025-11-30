@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import MainContainer from '../../container/MainContainer';
 import { useTheme } from '../../contexts/ThemeProvider';
@@ -16,7 +17,8 @@ import BannerCarousel, { Banner } from '../../components/BannerCarousel';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVoiceSearch } from '../../hooks/useVoiceSearch';
 import VoiceSearchButton from '../../components/VoiceSearchButton';
-import VoiceSearchOverlay from '../../components/VoiceSearchOverlay';
+import VoiceSearchOverlay from '../../popups/VoiceSearchOverlay';
+import AddressSelectionModal from '../../popups/AddressSelectionModal';
 
 interface HomeScreenProps {
     navigation: NativeStackNavigationProp<any>;
@@ -161,6 +163,18 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         language: 'en-US',
     });
 
+    // Stop listening when screen loses focus
+    useFocusEffect(
+        useCallback(() => {
+            return () => {
+                // Cleanup: stop listening when screen loses focus
+                if (isListening) {
+                    stopListening();
+                }
+            };
+        }, [isListening, stopListening])
+    );
+
     const handleVoiceButtonPress = useCallback(() => {
         console.log('Voice button pressed, isListening:', isListening);
         if (isListening) {
@@ -220,16 +234,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         return `${address.addressLine1}, ${address.city}, ${address.state} - ${address.pincode}`;
     }, []);
 
-    const getAddressTypeIcon = useCallback((type: string) => {
-        switch (type) {
-            case 'home':
-                return 'home';
-            case 'work':
-                return 'briefcase';
-            default:
-                return 'map-marker';
-        }
-    }, []);
 
     return (
         <MainContainer
@@ -472,115 +476,15 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             </ScrollView>
 
             {/* Address Selection Modal */}
-            <Modal
+            <AddressSelectionModal
                 visible={showAddressModal}
-                transparent
-                animationType="slide"
-                onRequestClose={() => setShowAddressModal(false)}
-            >
-                <View style={[styles.modalOverlay, { paddingTop: insets.top }]}>
-                    <View style={[styles.modalContent, { backgroundColor: colors.backgroundPrimary }]}>
-                        <View style={styles.modalHeader}>
-                            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
-                                Select Address
-                            </Text>
-                            <AppTouchableRipple onPress={() => setShowAddressModal(false)}>
-                                <Icon name="close" size={24} color={colors.textPrimary} />
-                            </AppTouchableRipple>
-                        </View>
-
-                        <ScrollView
-                            style={styles.modalScrollView}
-                            showsVerticalScrollIndicator={false}
-                        >
-                            {addresses.map((address) => (
-                                <AppTouchableRipple
-                                    key={address.id}
-                                    style={{
-                                        ...styles.addressOption,
-                                        backgroundColor:
-                                            selectedAddress?.id === address.id
-                                                ? colors.themePrimaryLight
-                                                : colors.backgroundSecondary,
-                                        borderColor:
-                                            selectedAddress?.id === address.id
-                                                ? colors.themePrimary
-                                                : colors.border,
-                                    }}
-                                    onPress={() => handleSelectAddress(address)}
-                                >
-                                    <View style={styles.addressOptionHeader}>
-                                        <View style={styles.addressOptionLeft}>
-                                            <Icon
-                                                name={getAddressTypeIcon(address.addressType)}
-                                                size={20}
-                                                color={
-                                                    selectedAddress?.id === address.id
-                                                        ? colors.themePrimary
-                                                        : colors.textLabel
-                                                }
-                                            />
-                                            <View style={styles.addressOptionInfo}>
-                                                <Text
-                                                    style={[
-                                                        styles.addressOptionType,
-                                                        {
-                                                            color:
-                                                                selectedAddress?.id === address.id
-                                                                    ? colors.themePrimary
-                                                                    : colors.textPrimary,
-                                                        },
-                                                    ]}
-                                                >
-                                                    {address.addressType === 'home'
-                                                        ? 'Home'
-                                                        : address.addressType === 'work'
-                                                            ? 'Work'
-                                                            : 'Other'}
-                                                    {address.isDefault && ' • Default'}
-                                                </Text>
-                                                <Text
-                                                    style={[
-                                                        styles.addressOptionText,
-                                                        {
-                                                            color:
-                                                                selectedAddress?.id === address.id
-                                                                    ? colors.textPrimary
-                                                                    : colors.textDescription,
-                                                        },
-                                                    ]}
-                                                    numberOfLines={2}
-                                                >
-                                                    {address.addressLine1}, {address.city}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                        {selectedAddress?.id === address.id && (
-                                            <Icon
-                                                name="check-circle"
-                                                size={24}
-                                                color={colors.themePrimary}
-                                            />
-                                        )}
-                                    </View>
-                                </AppTouchableRipple>
-                            ))}
-                        </ScrollView>
-
-                        <View style={styles.modalActions}>
-                            <AppTouchableRipple
-                                style={{ ...styles.modalButton, backgroundColor: colors.backgroundSecondary }}
-                                onPress={handleManageAddresses}
-                            >
-                                <Icon name="map-marker-plus" size={20} color={colors.themePrimary} />
-                                <Text style={[styles.modalButtonText, { color: colors.themePrimary }]}>
-                                    Manage Addresses
-                                </Text>
-                            </AppTouchableRipple>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
+                addresses={addresses}
+                selectedAddress={selectedAddress}
+                colors={colors}
+                onSelectAddress={handleSelectAddress}
+                onManageAddresses={handleManageAddresses}
+                onClose={() => setShowAddressModal(false)}
+            />
 
             {/* Voice Search Overlay */}
             <VoiceSearchOverlay
@@ -838,82 +742,5 @@ const styles = StyleSheet.create({
     featureText: {
         fontSize: fonts.size.font14,
         fontFamily: fonts.family.secondaryRegular,
-    },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'flex-end',
-    },
-    modalContent: {
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        maxHeight: '80%',
-        paddingBottom: 20,
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0,0,0,0.1)',
-    },
-    modalTitle: {
-        fontSize: fonts.size.font20,
-        fontFamily: fonts.family.primaryBold,
-    },
-    modalScrollView: {
-        maxHeight: 400,
-        paddingHorizontal: 20,
-        paddingTop: 16,
-    },
-    addressOption: {
-        padding: 16,
-        borderRadius: 12,
-        marginBottom: 12,
-        borderWidth: 2,
-    },
-    addressOptionHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    addressOptionLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-        gap: 12,
-    },
-    addressOptionInfo: {
-        flex: 1,
-    },
-    addressOptionType: {
-        fontSize: fonts.size.font14,
-        fontFamily: fonts.family.primaryBold,
-        marginBottom: 4,
-    },
-    addressOptionText: {
-        fontSize: fonts.size.font13,
-        fontFamily: fonts.family.secondaryRegular,
-        lineHeight: 18,
-    },
-    modalActions: {
-        paddingHorizontal: 20,
-        paddingTop: 16,
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(0,0,0,0.1)',
-    },
-    modalButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 14,
-        borderRadius: 12,
-        gap: 8,
-    },
-    modalButtonText: {
-        fontSize: fonts.size.font16,
-        fontFamily: fonts.family.primaryBold,
     },
 });
