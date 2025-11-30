@@ -16,6 +16,7 @@ import BannerCarousel, { Banner } from '../../components/BannerCarousel';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVoiceSearch } from '../../hooks/useVoiceSearch';
 import VoiceSearchButton from '../../components/VoiceSearchButton';
+import VoiceSearchOverlay from '../../components/VoiceSearchOverlay';
 
 interface HomeScreenProps {
     navigation: NativeStackNavigationProp<any>;
@@ -207,7 +208,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
     const handleManageAddresses = useCallback(() => {
         setShowAddressModal(false);
-        navigation.navigate('AddressList');
+        navigation.navigate(constant.routeName.addressList);
     }, [navigation]);
 
     const handleWishlistPress = useCallback(() => {
@@ -318,7 +319,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                     >
                         <Icon name="magnify" size={20} color={colors.themePrimary} />
                         <Text style={[styles.searchPlaceholder, { color: colors.themePrimary }]}>
-                            Search products, categories...
+                            Search products
                         </Text>
                         <Icon name="arrow-right" size={20} color={colors.themePrimary} />
                     </TouchableOpacity>
@@ -328,7 +329,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                         onPress={handleVoiceButtonPress}
                         colors={colors}
                         size={20}
-                        showLabel={true}
                     />
                 </View>
 
@@ -581,6 +581,15 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                     </View>
                 </View>
             </Modal>
+
+            {/* Voice Search Overlay */}
+            <VoiceSearchOverlay
+                visible={isListening}
+                isListening={isListening}
+                language="English (United States)"
+                colors={colors}
+                onClose={stopListening}
+            />
         </MainContainer>
     );
 };
@@ -693,7 +702,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderRadius: 12,
         paddingHorizontal: 16,
-        paddingVertical: 12,
+        paddingVertical: 5,
         gap: 12,
         borderWidth: 1,
         marginTop: 10,

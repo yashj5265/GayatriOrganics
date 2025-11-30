@@ -1,21 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Platform, PermissionsAndroid, Alert } from 'react-native';
+import { getVoiceModule, getVoiceEventEmitter, isVoiceModuleAvailable, initializeVoiceModule } from '../utils/voiceModuleBridge';
 
-// Try to import Voice, but handle if it's not available
-let Voice: any = null;
-try {
-    const voiceModule = require('@react-native-voice/voice');
-    // Handle both default export and named export
-    Voice = voiceModule.default || voiceModule;
-    // Check if it's actually a valid module (not null)
-    if (!Voice || (typeof Voice.isAvailable !== 'function' && !Voice.default)) {
-        console.warn('Voice module imported but native methods not available - rebuild required');
-        Voice = null;
-    }
-} catch (err) {
-    console.warn('Voice module not available:', err);
-    Voice = null;
-}
+// Initialize voice module using the bridge
+const Voice = initializeVoiceModule();
+const VoiceEventEmitter = getVoiceEventEmitter();
 
 interface UseVoiceSearchOptions {
     onResult?: (text: string) => void;
@@ -41,83 +30,117 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
     // Check if voice recognition is available
     useEffect(() => {
         const checkAvailability = async () => {
-            if (!Voice) {
-                console.warn('Voice module is not available. Please rebuild the app after installing @react-native-voice/voice');
+            // Re-initialize in case it wasn't ready before
+            const voiceModule = getVoiceModule();
+
+            if (!voiceModule || !isVoiceModuleAvailable()) {
+                console.warn('[useVoiceSearch] Voice module is not available. Please rebuild the app.');
                 setIsAvailable(false);
                 return;
             }
 
             try {
                 // Check if the native module is actually linked by trying to access it
-                // If Voice.isAvailable throws an error about null, the module isn't linked
-                if (typeof Voice.isAvailable === 'function') {
-                    const available = await Voice.isAvailable();
+                if (typeof voiceModule.isAvailable === 'function') {
+                    // Add a delay to ensure native module is initialized
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    const available = await voiceModule.isAvailable();
                     setIsAvailable(available);
-                    console.log('Voice recognition available:', available);
+                    console.log('[useVoiceSearch] Voice recognition available:', available);
+                } else if (typeof voiceModule.start === 'function') {
+                    // If isAvailable doesn't exist but start does, assume it might work
+                    console.warn('[useVoiceSearch] Voice.isAvailable not found, but Voice.start exists - will check on first use');
+                    setIsAvailable(true); // Optimistically set to true, will fail gracefully on use
                 } else {
-                    // Module exists but methods aren't available - likely not linked
-                    console.warn('Voice module methods not available - native module not linked');
                     setIsAvailable(false);
                 }
             } catch (err: any) {
-                console.warn('Voice recognition availability check failed:', err);
+                console.warn('[useVoiceSearch] Voice recognition availability check failed:', err);
+                const errorMsg = err?.message || err?.toString() || '';
                 // If error is about null or Cannot read property, the module isn't linked
-                if (err?.message?.includes('null') ||
-                    err?.message?.includes('Cannot read property') ||
-                    err?.message?.includes('isSpeechAvailable')) {
-                    console.error('Voice native module is not linked. Please rebuild the app.');
+                if (errorMsg.includes('null') ||
+                    errorMsg.includes('Cannot read property') ||
+                    errorMsg.includes('isSpeechAvailable') ||
+                    errorMsg.includes('startSpeech')) {
+                    console.error('[useVoiceSearch] Voice native module is not properly linked.');
                     setIsAvailable(false);
                 } else {
-                    // Other errors - allow users to try
+                    // Other errors - might be permission or device issue, allow users to try
+                    console.log('[useVoiceSearch] Availability check error (may be recoverable):', errorMsg);
                     setIsAvailable(true);
                 }
             }
         };
-        checkAvailability();
+        // Add a delay before checking to ensure native modules are initialized
+        const timeoutId = setTimeout(() => {
+            checkAvailability();
+        }, 1000);
+
+        return () => clearTimeout(timeoutId);
     }, []);
 
     // Initialize voice recognition
     useEffect(() => {
-        if (!Voice) {
-            console.warn('Voice module not available for initialization');
+        const voiceModule = getVoiceModule();
+
+        if (!voiceModule) {
+            console.warn('[useVoiceSearch] Voice module not available for initialization');
             return;
         }
 
         if (!isInitialized.current) {
-            Voice.onSpeechStart = () => {
+            // Set up event listeners using the wrapper's event system
+            voiceModule.onSpeechStart = (e?: any) => {
+                console.log('[useVoiceSearch] onSpeechStart event received', e);
                 setIsListening(true);
                 setError(null);
             };
 
-            Voice.onSpeechEnd = () => {
+            voiceModule.onSpeechEnd = (e?: any) => {
+                console.log('[useVoiceSearch] onSpeechEnd event received', e);
                 setIsListening(false);
             };
 
-            Voice.onSpeechResults = (e) => {
-                if (e.value && e.value.length > 0) {
+            voiceModule.onSpeechResults = (e: any) => {
+                console.log('[useVoiceSearch] onSpeechResults event received', e);
+                if (e && e.value && e.value.length > 0) {
                     const recognizedText = e.value[0];
+                    console.log('[useVoiceSearch] Recognized text:', recognizedText);
                     onResult?.(recognizedText);
                 }
                 setIsListening(false);
             };
 
-            Voice.onSpeechError = (e) => {
-                const errorMessage = e.error?.message || 'Speech recognition error';
+            voiceModule.onSpeechError = (e: any) => {
+                console.log('[useVoiceSearch] onSpeechError event received', e);
+                const errorMessage = e?.error?.message || e?.message || e?.toString() || 'Speech recognition error';
                 setError(errorMessage);
                 setIsListening(false);
                 onError?.(new Error(errorMessage));
             };
 
+            voiceModule.onSpeechPartialResults = (e: any) => {
+                console.log('[useVoiceSearch] onSpeechPartialResults event received', e);
+                // Handle partial results if needed
+            };
+
             isInitialized.current = true;
+            console.log('[useVoiceSearch] Voice event handlers initialized');
         }
 
         return () => {
-            if (isInitialized.current && Voice) {
-                Voice.destroy().then(() => {
-                    Voice.removeAllListeners();
-                }).catch((err: any) => {
-                    console.warn('Error cleaning up Voice:', err);
-                });
+            if (isInitialized.current && voiceModule) {
+                // Clean up listeners
+                if (voiceModule.removeAllListeners && typeof voiceModule.removeAllListeners === 'function') {
+                    voiceModule.removeAllListeners();
+                }
+
+                // Destroy the module
+                if (voiceModule.destroy && typeof voiceModule.destroy === 'function') {
+                    voiceModule.destroy().catch((err: any) => {
+                        console.warn('[useVoiceSearch] Error cleaning up Voice:', err);
+                    });
+                }
                 isInitialized.current = false;
             }
         };
@@ -150,10 +173,12 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
     // Start listening
     const startListening = useCallback(async () => {
         try {
-            console.log('Starting voice recognition...');
+            console.log('[useVoiceSearch] Starting voice recognition...');
+
+            const voiceModule = getVoiceModule();
 
             // Check if Voice module is available
-            if (!Voice) {
+            if (!voiceModule || !isVoiceModuleAvailable()) {
                 Alert.alert(
                     'Voice Search Not Available',
                     'Voice recognition module is not properly linked. Please rebuild the app:\n\n1. Stop the Metro bundler\n2. Run: npm run android\n3. Or rebuild in Android Studio',
@@ -175,17 +200,52 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
 
             // Stop any existing recognition first
             try {
-                await Voice.cancel();
+                if (voiceModule.cancel && typeof voiceModule.cancel === 'function') {
+                    await voiceModule.cancel();
+                }
             } catch (cancelErr) {
-                console.log('No existing recognition to cancel');
+                console.log('[useVoiceSearch] No existing recognition to cancel');
+            }
+
+            // Ensure event handlers are set before starting
+            if (!isInitialized.current) {
+                voiceModule.onSpeechStart = () => {
+                    console.log('[useVoiceSearch] onSpeechStart event received');
+                    setIsListening(true);
+                    setError(null);
+                };
+                voiceModule.onSpeechEnd = () => {
+                    console.log('[useVoiceSearch] onSpeechEnd event received');
+                    setIsListening(false);
+                };
+                voiceModule.onSpeechResults = (e: any) => {
+                    console.log('[useVoiceSearch] onSpeechResults event received', e);
+                    if (e && e.value && e.value.length > 0) {
+                        const recognizedText = e.value[0];
+                        console.log('[useVoiceSearch] Recognized text:', recognizedText);
+                        onResult?.(recognizedText);
+                    }
+                    setIsListening(false);
+                };
+                voiceModule.onSpeechError = (e: any) => {
+                    console.log('[useVoiceSearch] onSpeechError event received', e);
+                    const errorMessage = e?.error?.message || e?.message || e?.toString() || 'Speech recognition error';
+                    setError(errorMessage);
+                    setIsListening(false);
+                    onError?.(new Error(errorMessage));
+                };
+                isInitialized.current = true;
             }
 
             // Start new recognition
-            console.log('Starting Voice.start with language:', language);
-            await Voice.start(language);
-            console.log('Voice.start called successfully');
+            console.log('[useVoiceSearch] Starting Voice.start with language:', language);
+            await voiceModule.start(language);
+            console.log('[useVoiceSearch] Voice.start called successfully');
+
+            // Set listening state optimistically (will be confirmed by onSpeechStart event)
+            setIsListening(true);
         } catch (err: any) {
-            console.error('Voice recognition error:', err);
+            console.error('[useVoiceSearch] Voice recognition error:', err);
             const errorMessage = err?.message || err?.toString() || 'Failed to start voice recognition';
             setError(errorMessage);
             setIsListening(false);
@@ -197,8 +257,11 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
                 userMessage = 'No speech detected. Please try again.';
             } else if (err?.message?.includes('permission')) {
                 userMessage = 'Microphone permission is required. Please enable it in settings.';
-            } else if (err?.message?.includes('null') || err?.message?.includes('startSpeech')) {
-                userMessage = 'Voice recognition module is not properly linked. Please rebuild the app completely.';
+            } else if (err?.message?.includes('null') ||
+                err?.message?.includes('startSpeech') ||
+                err?.message?.includes('not available') ||
+                err?.message?.includes('not properly linked')) {
+                userMessage = 'Voice recognition module is not properly linked. Please:\n\n1. Stop Metro bundler\n2. Clean build: cd android && ./gradlew clean\n3. Rebuild: npm run android';
             } else {
                 userMessage += 'Please check your microphone and try again.';
             }
@@ -209,16 +272,18 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
 
     // Stop listening
     const stopListening = useCallback(async () => {
-        if (!Voice) {
+        const voiceModule = getVoiceModule();
+
+        if (!voiceModule) {
             setIsListening(false);
             return;
         }
 
         try {
-            await Voice.stop();
+            await voiceModule.stop();
             setIsListening(false);
         } catch (err: any) {
-            console.error('Error stopping voice recognition:', err);
+            console.error('[useVoiceSearch] Error stopping voice recognition:', err);
             setIsListening(false);
         }
     }, []);

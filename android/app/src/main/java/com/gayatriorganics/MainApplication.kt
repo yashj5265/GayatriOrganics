@@ -9,6 +9,7 @@ import com.facebook.react.ReactNativeHost
 import com.facebook.react.ReactPackage
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
+import com.wenkesj.voice.VoicePackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -16,8 +17,8 @@ class MainApplication : Application(), ReactApplication {
       object : DefaultReactNativeHost(this) {
         override fun getPackages(): List<ReactPackage> =
             PackageList(this).packages.apply {
-              // Packages that cannot be autolinked yet can be added manually here, for example:
-              // add(MyReactNativePackage())
+              // Manually add VoicePackage to ensure it's linked
+              add(VoicePackage())
             }
 
         override fun getJSMainModuleName(): String = "index"

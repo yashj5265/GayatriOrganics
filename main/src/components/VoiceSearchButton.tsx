@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Text, ViewStyle } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import AppTouchableRipple from './AppTouchableRipple';
 import { AppColors } from '../styles/colors';
@@ -35,45 +35,22 @@ const VoiceSearchButton: React.FC<VoiceSearchButtonProps> = memo(({
         }
     };
 
+    const buttonStyle: ViewStyle = {
+        ...styles.button,
+        opacity: isDisabled ? 0.5 : 1,
+    };
+
     return (
         <AppTouchableRipple
             onPress={handlePress}
             disabled={isDisabled}
-            style={[
-                styles.button,
-                {
-                    backgroundColor: isListening
-                        ? colors.themePrimary
-                        : isDisabled
-                            ? 'rgba(0,0,0,0.05)'
-                            : colors.themePrimaryLight,
-                    opacity: isDisabled ? 0.5 : 1,
-                },
-            ]}
+            style={buttonStyle}
         >
-            {isListening ? (
-                <View style={styles.listeningContainer}>
-                    <ActivityIndicator size="small" color={colors.white} />
-                    {showLabel && (
-                        <Text style={[styles.label, { color: colors.white }]}>
-                            Listening...
-                        </Text>
-                    )}
-                </View>
-            ) : (
-                <View style={styles.iconContainer}>
-                    <Icon 
-                        name="microphone" 
-                        size={size} 
-                        color={isDisabled ? colors.textLabel : colors.themePrimary} 
-                    />
-                    {showLabel && (
-                        <Text style={[styles.label, { color: isDisabled ? colors.textLabel : colors.themePrimary }]}>
-                            Speak
-                        </Text>
-                    )}
-                </View>
-            )}
+            <Icon
+                name="microphone"
+                size={size}
+                color={isDisabled ? colors.textLabel : colors.themePrimary}
+            />
         </AppTouchableRipple>
     );
 });
@@ -84,26 +61,12 @@ export default VoiceSearchButton;
 
 const styles = StyleSheet.create({
     button: {
-        minWidth: 40,
+        width: 40,
         height: 40,
         borderRadius: 20,
         justifyContent: 'center',
         alignItems: 'center',
-        paddingHorizontal: 12,
-    },
-    iconContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-    },
-    listeningContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    label: {
-        fontSize: fonts.size.font12,
-        fontFamily: fonts.family.primaryMedium,
+        padding: 0,
     },
 });
 
