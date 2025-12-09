@@ -128,35 +128,90 @@ const ProductListScreen: React.FC<ProductListScreenNavigationProps> = ({ navigat
         }
     }, [route?.params?.focusSearch]);
 
-    // Apply filters when products, search query, or filter changes
+    // Search products using API when search query changes
     useEffect(() => {
-        let filtered = [...products];
+        const searchProducts = async () => {
+            if (searchQuery.trim() === '') {
+                // If no search query, show all products
+                setFilteredProducts(products);
+                return;
+            }
 
-        // Apply search filter
-        if (searchQuery.trim() !== '') {
-            filtered = filtered.filter(
-                (product) =>
-                    product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    product.category.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    product.description.toLowerCase().includes(searchQuery.toLowerCase())
-            );
+            try {
+                const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
+
+                // Call search API
+                const response = await ApiManager.get({
+                    endpoint: constant.apiEndPoints.searchProducts,
+                    params: { query: searchQuery.trim() },
+                    token: token || undefined,
+                    showError: false, // Don't show error toast for search
+                });
+
+                if (response?.data && Array.isArray(response.data)) {
+                    // Apply stock filter to search results
+                    let filtered = response.data;
+                    switch (selectedFilter) {
+                        case 'inStock':
+                            filtered = filtered.filter((p: Product) => p.stock > 5);
+                            break;
+                        case 'lowStock':
+                            filtered = filtered.filter((p: Product) => p.stock > 0 && p.stock <= 5);
+                            break;
+                        case 'outOfStock':
+                            filtered = filtered.filter((p: Product) => p.stock === 0);
+                            break;
+                    }
+                    setFilteredProducts(filtered);
+                } else {
+                    // Fallback to local filtering
+                    let filtered = products.filter(
+                        (product) =>
+                            product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            product.category.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            product.description.toLowerCase().includes(searchQuery.toLowerCase())
+                    );
+                    setFilteredProducts(filtered);
+                }
+            } catch (error) {
+                console.error('Error searching products:', error);
+                // Fallback to local filtering on error
+                let filtered = products.filter(
+                    (product) =>
+                        product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        product.category.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        product.description.toLowerCase().includes(searchQuery.toLowerCase())
+                );
+                setFilteredProducts(filtered);
+            }
+        };
+
+        // Debounce search API calls
+        const timeoutId = setTimeout(() => {
+            searchProducts();
+        }, 500); // Wait 500ms after user stops typing
+
+        return () => clearTimeout(timeoutId);
+    }, [searchQuery, selectedFilter, products]);
+
+    // Apply stock filter when products change (for non-search scenarios)
+    useEffect(() => {
+        if (searchQuery.trim() === '') {
+            let filtered = [...products];
+            switch (selectedFilter) {
+                case 'inStock':
+                    filtered = filtered.filter(p => p.stock > 5);
+                    break;
+                case 'lowStock':
+                    filtered = filtered.filter(p => p.stock > 0 && p.stock <= 5);
+                    break;
+                case 'outOfStock':
+                    filtered = filtered.filter(p => p.stock === 0);
+                    break;
+            }
+            setFilteredProducts(filtered);
         }
-
-        // Apply stock filter
-        switch (selectedFilter) {
-            case 'inStock':
-                filtered = filtered.filter(p => p.stock > 5);
-                break;
-            case 'lowStock':
-                filtered = filtered.filter(p => p.stock > 0 && p.stock <= 5);
-                break;
-            case 'outOfStock':
-                filtered = filtered.filter(p => p.stock === 0);
-                break;
-        }
-
-        setFilteredProducts(filtered);
-    }, [products, searchQuery, selectedFilter]);
+    }, [products, selectedFilter, searchQuery]);
 
     const handleSearch = useCallback((query: string) => {
         setSearchQuery(query);

@@ -9,19 +9,38 @@ export default {
         verifyOTP: '/api/verify-otp',
         logout: '/api/logout',
 
+        // User Profile
+        getProfile: '/api/profile',
+        updateProfile: '/api/profile/update',
+
         // User Registration (for future)
         register: '/api/user/register',
+
+        // Product
+        searchProducts: '/api/search-products',
+        allProducts: '/api/admin/products',//Get
+        getProduct: '/api/admin/product/',//Get
 
         // Category
         allCategories: '/api/admin/categories',
         getCategory: '/api/admin/category',
 
-        // Product
-        allProducts: '/api/admin/products',//Get
-        getProduct: '/api/admin/product/',//Get
+        // Address
+        addressList: '/api/address',
+        addressSearch: '/api/address/search',
+        addAddress: '/api/address',
+        updateAddress: '/api/address', // Use with :id
+        deleteAddress: '/api/address', // Use with :id
+        setAddressDefault: '/api/address', // Use with :id/set-default
 
-        // Orders (for future)
-        createOrder: '/api/user/order',
+        // Cart
+        addToCart: '/api/cart/add',
+        getCart: '/api/cart',
+        updateCart: '/api/cart/update', // Use with :id
+        removeFromCart: '/api/cart/remove', // Use with :id
+
+        // Orders
+        createOrder: '/api/order/create',
         myOrders: '/api/user/orders',
         getOrder: '/api/user/order',
     },

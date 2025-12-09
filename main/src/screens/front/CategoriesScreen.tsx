@@ -149,11 +149,15 @@ const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ navigation }) => {
     }, [fetchCategories]);
 
     const handleCategoryPress = useCallback((category: Category) => {
+        if (!category || !category.id) {
+            console.error('❌ Invalid category data:', category);
+            return;
+        }
         const propsToSend: CategoryDetailScreenProps = {
             categoryId: category.id,
             categoryName: category.name
         };
-        navigation.navigate(constant.routeName.categoryDetail, propsToSend);
+        navigation.navigate(constant.routeName.categoryDetail, { params: propsToSend });
     }, [navigation]);
 
     const renderCategoryItem = useCallback(({ item }: { item: Category }) => (

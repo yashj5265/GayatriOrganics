@@ -50,7 +50,9 @@ const WishlistScreen: React.FC<WishlistScreenNavigationProps> = ({ navigation })
             price: parseFloat(product.price),
             image: product.image1,
             unit: 'pc',
-            quantity: 1
+            quantity: 1,
+            categoryId: product.category_id || product.category?.id,
+            productId: product.id,
         });
     }, [addToCart]);
 

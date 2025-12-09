@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -8,17 +8,19 @@ import { useTheme } from '../../contexts/ThemeProvider';
 import fonts from '../../styles/fonts';
 import AppTouchableRipple from '../../components/AppTouchableRipple';
 import StorageManager from '../../managers/StorageManager';
+import ApiManager from '../../managers/ApiManager';
 import constant from '../../utilities/constant';
 import { useCart } from '../../contexts/CardContext';
 import { useAddress, Address } from '../../contexts/AddressContext';
 import { useWishlist } from '../../contexts/WishlistContext';
-import { ProductListScreenProps } from './ProductListScreen';
+import { ProductListScreenProps, Product as ProductListProduct } from './ProductListScreen';
 import BannerCarousel, { Banner } from '../../components/BannerCarousel';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVoiceSearch } from '../../hooks/useVoiceSearch';
 import VoiceSearchButton from '../../components/VoiceSearchButton';
 import VoiceSearchOverlay from '../../popups/VoiceSearchOverlay';
 import AddressSelectionModal from '../../popups/AddressSelectionModal';
+import { CategoryDetailScreenProps } from './CategoryDetailScreen';
 
 interface HomeScreenProps {
     navigation: NativeStackNavigationProp<any>;
@@ -27,33 +29,35 @@ interface HomeScreenProps {
 interface Category {
     id: number;
     name: string;
-    icon: string;
-    color: string;
+    description?: string;
+    image?: string;
+    image_url?: string;
+    product_count?: number;
 }
 
-interface FeaturedProduct {
-    id: number;
-    name: string;
-    price: number;
-    image: string;
-    unit: string;
-}
+const getImageUrl = (imagePath: string | null | undefined) => {
+    if (!imagePath) return null;
+    if (imagePath.startsWith('http')) return imagePath;
+    return `https://gayatriorganicfarm.com/storage/${imagePath}`;
+};
 
-const CATEGORIES: Category[] = [
-    { id: 1, name: 'Vegetables', icon: '🥬', color: '#4caf50' },
-    { id: 2, name: 'Fruits', icon: '🍎', color: '#ff9800' },
-    { id: 3, name: 'Grains', icon: '🌾', color: '#795548' },
-    { id: 4, name: 'Dairy', icon: '🥛', color: '#2196f3' },
-];
+// Default category icons mapping (fallback when no image)
+const getCategoryIcon = (categoryName: string): string => {
+    const name = categoryName.toLowerCase();
+    if (name.includes('vegetable') || name.includes('veggie')) return '🥬';
+    if (name.includes('fruit')) return '🍎';
+    if (name.includes('grain') || name.includes('cereal')) return '🌾';
+    if (name.includes('dairy') || name.includes('milk')) return '🥛';
+    if (name.includes('spice') || name.includes('masala')) return '🌶️';
+    if (name.includes('pulse') || name.includes('dal')) return '🫘';
+    return '📦'; // Default icon
+};
 
-const FEATURED_PRODUCTS: FeaturedProduct[] = [
-    { id: 1, name: 'Fresh Spinach', price: 40, image: '🥬', unit: 'bunch' },
-    { id: 2, name: 'Organic Tomatoes', price: 60, image: '🍅', unit: 'kg' },
-    { id: 3, name: 'Farm Fresh Milk', price: 50, image: '🥛', unit: 'liter' },
-    { id: 4, name: 'Green Beans', price: 45, image: '🫘', unit: 'kg' },
-    { id: 5, name: 'Fresh Carrots', price: 35, image: '🥕', unit: 'kg' },
-    { id: 6, name: 'Organic Apples', price: 120, image: '🍎', unit: 'kg' },
-];
+// Default category colors
+const getCategoryColor = (index: number): string => {
+    const colors = ['#4caf50', '#ff9800', '#795548', '#2196f3', '#9c27b0', '#f44336'];
+    return colors[index % colors.length];
+};
 
 const BANNERS: Banner[] = [
     {
@@ -98,6 +102,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     const { selectedAddress, addresses, selectAddress } = useAddress();
     const [userName, setUserName] = useState<string>('Guest');
     const [showAddressModal, setShowAddressModal] = useState(false);
+    const [categories, setCategories] = useState<Category[]>([]);
+    const [featuredProducts, setFeaturedProducts] = useState<ProductListProduct[]>([]);
+    const [categoriesLoading, setCategoriesLoading] = useState<boolean>(false);
+    const [productsLoading, setProductsLoading] = useState<boolean>(false);
 
     useEffect(() => {
         const loadUserData = async () => {
@@ -113,17 +121,89 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         loadUserData();
     }, []);
 
-    const handleAddToCart = useCallback((product: FeaturedProduct) => {
+    // Fetch categories
+    const fetchCategories = useCallback(async () => {
+        setCategoriesLoading(true);
+        try {
+            const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
+
+            const response = await ApiManager.get({
+                endpoint: constant.apiEndPoints.allCategories,
+                token: token || undefined,
+                showError: false, // Don't show error on home screen
+            });
+
+            if (response?.data && Array.isArray(response.data)) {
+                // Take first 8 categories for home screen
+                setCategories(response.data.slice(0, 8));
+            } else if (response?.success && response?.data && Array.isArray(response.data)) {
+                setCategories(response.data.slice(0, 8));
+            }
+        } catch (error) {
+            console.error('Error fetching categories:', error);
+        } finally {
+            setCategoriesLoading(false);
+        }
+    }, []);
+
+    // Fetch featured products
+    const fetchFeaturedProducts = useCallback(async () => {
+        setProductsLoading(true);
+        try {
+            const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
+
+            const response = await ApiManager.get({
+                endpoint: constant.apiEndPoints.allProducts,
+                token: token || undefined,
+                showError: false, // Don't show error on home screen
+            });
+
+            if (response?.data && Array.isArray(response.data)) {
+                // Take first 6 products as featured products
+                // You can also filter by featured flag if your API supports it
+                const products = response.data
+                    .filter((p: ProductListProduct) => p.stock > 0) // Only in-stock products
+                    .slice(0, 6);
+                setFeaturedProducts(products);
+            } else if (response?.success && response?.data && Array.isArray(response.data)) {
+                const products = response.data
+                    .filter((p: ProductListProduct) => p.stock > 0)
+                    .slice(0, 6);
+                setFeaturedProducts(products);
+            }
+        } catch (error) {
+            console.error('Error fetching featured products:', error);
+        } finally {
+            setProductsLoading(false);
+        }
+    }, []);
+
+    // Load data on screen focus
+    useFocusEffect(
+        useCallback(() => {
+            fetchCategories();
+            fetchFeaturedProducts();
+        }, [fetchCategories, fetchFeaturedProducts])
+    );
+
+    const handleAddToCart = useCallback((product: ProductListProduct) => {
+        if (product.stock === 0) {
+            Alert.alert('Out of Stock', 'This product is currently out of stock.');
+            return;
+        }
+
         if (isInCart(product.id)) {
             navigation.navigate(constant.routeName.cart);
         } else {
             addToCart({
                 id: product.id,
                 name: product.name,
-                price: product.price,
-                image: product.image,
-                unit: product.unit,
-                quantity: 1
+                price: parseFloat(product.price),
+                image: product.image1,
+                unit: 'pc',
+                quantity: 1,
+                categoryId: product.category_id || product.category?.id,
+                productId: product.id,
             });
             Alert.alert(
                 'Added to Cart',
@@ -135,6 +215,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             );
         }
     }, [isInCart, addToCart, navigation]);
+
+    const handleProductPress = useCallback((product: ProductListProduct) => {
+        navigation.navigate(constant.routeName.productDetail, { productId: product.id });
+    }, [navigation]);
 
     const handleSearchPress = useCallback(() => {
         const propsToSend: ProductListScreenProps = {
@@ -163,24 +247,37 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         language: 'en-US',
     });
 
-    // Stop listening when screen loses focus
+    // Stop listening when screen loses focus (but not when overlay is shown)
     useFocusEffect(
         useCallback(() => {
             return () => {
                 // Cleanup: stop listening when screen loses focus
+                // Only stop if we're actually leaving the screen (not just showing overlay)
                 if (isListening) {
+                    console.log('[HomeScreen] Screen losing focus, stopping voice recognition');
                     stopListening();
                 }
             };
         }, [isListening, stopListening])
     );
 
-    const handleVoiceButtonPress = useCallback(() => {
+    const handleVoiceButtonPress = useCallback(async () => {
         console.log('Voice button pressed, isListening:', isListening);
+
+        // Prevent rapid clicks
         if (isListening) {
-            stopListening();
+            // Stop listening
+            console.log('[HomeScreen] Stopping voice recognition...');
+            await stopListening();
         } else {
-            startListening();
+            // Ensure we're not already listening before starting
+            // This prevents double-start issues
+            console.log('[HomeScreen] Starting voice recognition...');
+            try {
+                await startListening();
+            } catch (error) {
+                console.error('[HomeScreen] Error starting voice search:', error);
+            }
         }
     }, [isListening, startListening, stopListening]);
 
@@ -188,8 +285,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         navigation.navigate(constant.routeName.products);
     }, [navigation]);
 
-    const handleCategoryPress = useCallback(() => {
-        navigation.navigate(constant.routeName.categories);
+    const handleCategoryPress = useCallback((category: Category) => {
+        if (!category || !category.id) {
+            console.error('❌ Invalid category data:', category);
+            return;
+        }
+        const propsToSend: CategoryDetailScreenProps = {
+            categoryId: category.id,
+            categoryName: category.name,
+        };
+        navigation.navigate(constant.routeName.categoryDetail, { params: propsToSend });
     }, [navigation]);
 
     const handleBannerPress = useCallback((banner: Banner) => {
@@ -345,27 +450,70 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
                 {/* Categories */}
                 <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-                        Shop by Category
-                    </Text>
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.categoriesContainer}
-                    >
-                        {CATEGORIES.map((category) => (
-                            <AppTouchableRipple
-                                key={category.id}
-                                style={{ ...styles.categoryCard, backgroundColor: colors.backgroundSecondary }}
-                                onPress={handleCategoryPress}
-                            >
-                                <Text style={styles.categoryIcon}>{category.icon}</Text>
-                                <Text style={[styles.categoryName, { color: colors.textPrimary }]}>
-                                    {category.name}
+                    <View style={styles.sectionHeader}>
+                        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                            Shop by Category
+                        </Text>
+                        <AppTouchableRipple onPress={() => navigation.navigate(constant.routeName.categories)}>
+                            <View style={styles.viewAllButton}>
+                                <Text style={[styles.viewAll, { color: colors.themePrimary }]}>
+                                    View All
                                 </Text>
-                            </AppTouchableRipple>
-                        ))}
-                    </ScrollView>
+                                <Icon name="arrow-right" size={16} color={colors.themePrimary} />
+                            </View>
+                        </AppTouchableRipple>
+                    </View>
+                    {categoriesLoading ? (
+                        <View style={styles.loadingContainer}>
+                            <ActivityIndicator size="small" color={colors.themePrimary} />
+                            <Text style={[styles.loadingText, { color: colors.textLabel }]}>
+                                Loading categories...
+                            </Text>
+                        </View>
+                    ) : categories.length > 0 ? (
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.categoriesContainer}
+                        >
+                            {categories.map((category, index) => {
+                                const imageUrl = getImageUrl(category.image || category.image_url);
+                                return (
+                                    <AppTouchableRipple
+                                        key={category.id}
+                                        style={{ ...styles.categoryCard, backgroundColor: colors.backgroundSecondary }}
+                                        onPress={() => handleCategoryPress(category)}
+                                    >
+                                        {imageUrl ? (
+                                            <Image
+                                                source={{ uri: imageUrl }}
+                                                style={styles.categoryImage}
+                                                resizeMode="cover"
+                                            />
+                                        ) : (
+                                            <View style={[styles.categoryIconContainer, { backgroundColor: getCategoryColor(index) + '20' }]}>
+                                                <Text style={styles.categoryIcon}>{getCategoryIcon(category.name)}</Text>
+                                            </View>
+                                        )}
+                                        <Text style={[styles.categoryName, { color: colors.textPrimary }]} numberOfLines={2}>
+                                            {category.name}
+                                        </Text>
+                                        {category.product_count !== undefined && (
+                                            <Text style={[styles.categoryCount, { color: colors.textLabel }]}>
+                                                {category.product_count} items
+                                            </Text>
+                                        )}
+                                    </AppTouchableRipple>
+                                );
+                            })}
+                        </ScrollView>
+                    ) : (
+                        <View style={styles.emptyContainer}>
+                            <Text style={[styles.emptyText, { color: colors.textLabel }]}>
+                                No categories available
+                            </Text>
+                        </View>
+                    )}
                 </View>
 
                 {/* Featured Products */}
@@ -384,66 +532,90 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                         </AppTouchableRipple>
                     </View>
 
-                    <View style={styles.productsGrid}>
-                        {FEATURED_PRODUCTS.map((product) => {
-                            const inCart = isInCart(product.id);
-                            return (
-                                <AppTouchableRipple
-                                    key={product.id}
-                                    style={{ ...styles.productCard, backgroundColor: colors.backgroundSecondary }}
-                                    onPress={() => {
-                                        // TODO: Navigate to product detail when implemented
-                                    }}
-                                >
-                                    <Text style={styles.productImage}>{product.image}</Text>
-                                    <Text
-                                        style={[styles.productName, { color: colors.textPrimary }]}
-                                        numberOfLines={2}
+                    {productsLoading ? (
+                        <View style={styles.loadingContainer}>
+                            <ActivityIndicator size="small" color={colors.themePrimary} />
+                            <Text style={[styles.loadingText, { color: colors.textLabel }]}>
+                                Loading products...
+                            </Text>
+                        </View>
+                    ) : featuredProducts.length > 0 ? (
+                        <View style={styles.productsGrid}>
+                            {featuredProducts.map((product) => {
+                                const inCart = isInCart(product.id);
+                                const imageUrl = product.image1 ? `https://gayatriorganicfarm.com/storage/${product.image1}` : null;
+                                return (
+                                    <AppTouchableRipple
+                                        key={product.id}
+                                        style={{ ...styles.productCard, backgroundColor: colors.backgroundSecondary }}
+                                        onPress={() => handleProductPress(product)}
                                     >
-                                        {product.name}
-                                    </Text>
-                                    <Text style={[styles.productUnit, { color: colors.textLabel }]}>
-                                        per {product.unit}
-                                    </Text>
-                                    <View style={styles.productFooter}>
+                                        {imageUrl ? (
+                                            <Image
+                                                source={{ uri: imageUrl }}
+                                                style={styles.productImage}
+                                                resizeMode="cover"
+                                            />
+                                        ) : (
+                                            <View style={[styles.productImagePlaceholder, { backgroundColor: colors.themePrimaryLight }]}>
+                                                <Icon name="image-off" size={32} color={colors.themePrimary} />
+                                            </View>
+                                        )}
                                         <Text
-                                            style={[
-                                                styles.productPrice,
-                                                { color: colors.themePrimary },
-                                            ]}
+                                            style={[styles.productName, { color: colors.textPrimary }]}
+                                            numberOfLines={2}
                                         >
-                                            ₹{product.price}
+                                            {product.name}
                                         </Text>
-                                        <AppTouchableRipple
-                                            style={{
-                                                ...styles.addButton,
-                                                backgroundColor: inCart
-                                                    ? colors.themePrimary
-                                                    : colors.themePrimaryLight,
-                                            }}
-                                            onPress={(e) => {
-                                                e?.stopPropagation();
-                                                handleAddToCart(product);
-                                            }}
-                                        >
+                                        <Text style={[styles.productUnit, { color: colors.textLabel }]}>
+                                            {product.category?.name || 'Product'}
+                                        </Text>
+                                        <View style={styles.productFooter}>
                                             <Text
                                                 style={[
-                                                    styles.addButtonText,
-                                                    {
-                                                        color: inCart
-                                                            ? colors.white
-                                                            : colors.themePrimary,
-                                                    },
+                                                    styles.productPrice,
+                                                    { color: colors.themePrimary },
                                                 ]}
                                             >
-                                                {inCart ? '✓' : '+'}
+                                                ₹{parseFloat(product.price).toFixed(2)}
                                             </Text>
-                                        </AppTouchableRipple>
-                                    </View>
-                                </AppTouchableRipple>
-                            );
-                        })}
-                    </View>
+                                            <AppTouchableRipple
+                                                style={{
+                                                    ...styles.addButton,
+                                                    backgroundColor: inCart
+                                                        ? colors.themePrimary
+                                                        : colors.themePrimaryLight,
+                                                }}
+                                                onPress={(e) => {
+                                                    e?.stopPropagation();
+                                                    handleAddToCart(product);
+                                                }}
+                                            >
+                                                <Text
+                                                    style={[
+                                                        styles.addButtonText,
+                                                        {
+                                                            color: inCart
+                                                                ? colors.white
+                                                                : colors.themePrimary,
+                                                        },
+                                                    ]}
+                                                >
+                                                    {inCart ? '✓' : '+'}
+                                                </Text>
+                                            </AppTouchableRipple>
+                                        </View>
+                                    </AppTouchableRipple>
+                                );
+                            })}
+                        </View>
+                    ) : (
+                        <View style={styles.emptyContainer}>
+                            <Text style={[styles.emptyText, { color: colors.textLabel }]}>
+                                No featured products available
+                            </Text>
+                        </View>
+                    )}
                 </View>
 
                 {/* Why Choose Us */}
@@ -661,14 +833,34 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 4,
     },
+    categoryIconContainer: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
     categoryIcon: {
-        fontSize: 40,
+        fontSize: 32,
+    },
+    categoryImage: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
         marginBottom: 8,
     },
     categoryName: {
         fontSize: fonts.size.font13,
         fontFamily: fonts.family.primaryMedium,
         textAlign: 'center',
+        marginTop: 4,
+    },
+    categoryCount: {
+        fontSize: fonts.size.font10,
+        fontFamily: fonts.family.secondaryRegular,
+        textAlign: 'center',
+        marginTop: 2,
     },
     productsGrid: {
         flexDirection: 'row',
@@ -686,9 +878,19 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
     },
     productImage: {
-        fontSize: 50,
-        textAlign: 'center',
+        width: '100%',
+        height: 120,
+        borderRadius: 8,
         marginBottom: 8,
+        backgroundColor: '#f0f0f0',
+    },
+    productImagePlaceholder: {
+        width: '100%',
+        height: 120,
+        borderRadius: 8,
+        marginBottom: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     productName: {
         fontSize: fonts.size.font14,
@@ -740,6 +942,25 @@ const styles = StyleSheet.create({
         marginRight: 12,
     },
     featureText: {
+        fontSize: fonts.size.font14,
+        fontFamily: fonts.family.secondaryRegular,
+    },
+    loadingContainer: {
+        padding: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    loadingText: {
+        fontSize: fonts.size.font14,
+        fontFamily: fonts.family.secondaryRegular,
+    },
+    emptyContainer: {
+        padding: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    emptyText: {
         fontSize: fonts.size.font14,
         fontFamily: fonts.family.secondaryRegular,
     },

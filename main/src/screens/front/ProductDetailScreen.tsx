@@ -141,7 +141,9 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                 price: parseFloat(product.price),
                 image: product.image1,
                 unit: 'pc',
-                quantity: quantity
+                quantity: quantity,
+                categoryId: product.category_id || product.category?.id,
+                productId: product.id,
             });
             Alert.alert(
                 'Added to Cart',
@@ -304,10 +306,18 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                         {/* Category Badge */}
                         <TouchableOpacity
                             style={[styles.categoryBadge, { backgroundColor: colors.themePrimaryLight }]}
-                            onPress={() => navigation.navigate(constant.routeName.categoryDetail, {
-                                categoryId: product.category_id,
-                                categoryName: product.category.name
-                            })}
+                            onPress={() => {
+                                if (!product.category_id) {
+                                    console.error('❌ Product category_id is missing');
+                                    return;
+                                }
+                                navigation.navigate(constant.routeName.categoryDetail, {
+                                    params: {
+                                        categoryId: product.category_id,
+                                        categoryName: product.category.name
+                                    }
+                                });
+                            }}
                         >
                             <Icon name="tag" size={14} color={colors.themePrimary} />
                             <Text style={[styles.categoryBadgeText, { color: colors.themePrimary }]}>

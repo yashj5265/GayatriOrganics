@@ -61,17 +61,67 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
 
     const loadUserData = useCallback(async () => {
         try {
-            const userData = await StorageManager.getItem(constant.shareInstanceKey.userData);
-            if (userData && typeof userData === 'object') {
-                if ('name' in userData) {
-                    setUserName(userData.name || 'User');
+            const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
+
+            if (token) {
+                // Fetch profile from API
+                const response = await ApiManager.get({
+                    endpoint: constant.apiEndPoints.getProfile,
+                    token: token,
+                    showError: false, // Don't show error toast on initial load
+                });
+
+                if (response?.data) {
+                    const profileData = response.data;
+                    setUserName(profileData.name || profileData.full_name || 'User');
+                    setUserMobile(profileData.mobile || profileData.phone || '');
+
+                    // Update stored user data
+                    await StorageManager.setItem(constant.shareInstanceKey.userData, {
+                        ...profileData,
+                        name: profileData.name || profileData.full_name,
+                        mobile: profileData.mobile || profileData.phone,
+                    });
+                } else {
+                    // Fallback to stored user data
+                    const userData = await StorageManager.getItem(constant.shareInstanceKey.userData);
+                    if (userData && typeof userData === 'object') {
+                        if ('name' in userData) {
+                            setUserName(userData.name || 'User');
+                        }
+                        if ('mobile' in userData) {
+                            setUserMobile(userData.mobile || '');
+                        }
+                    }
                 }
-                if ('mobile' in userData) {
-                    setUserMobile(userData.mobile || '');
+            } else {
+                // No token, load from storage
+                const userData = await StorageManager.getItem(constant.shareInstanceKey.userData);
+                if (userData && typeof userData === 'object') {
+                    if ('name' in userData) {
+                        setUserName(userData.name || 'User');
+                    }
+                    if ('mobile' in userData) {
+                        setUserMobile(userData.mobile || '');
+                    }
                 }
             }
         } catch (error) {
             console.error('Error loading user data:', error);
+            // Fallback to stored user data on error
+            try {
+                const userData = await StorageManager.getItem(constant.shareInstanceKey.userData);
+                if (userData && typeof userData === 'object') {
+                    if ('name' in userData) {
+                        setUserName(userData.name || 'User');
+                    }
+                    if ('mobile' in userData) {
+                        setUserMobile(userData.mobile || '');
+                    }
+                }
+            } catch (storageError) {
+                console.error('Error loading from storage:', storageError);
+            }
         }
     }, []);
 

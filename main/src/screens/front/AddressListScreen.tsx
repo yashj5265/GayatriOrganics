@@ -229,18 +229,7 @@ const AddressListScreen: React.FC<AddressListScreenProps> = ({ navigation }) => 
                     </View>
                 </View>
 
-                {/* Add Address Button */}
-                <View style={styles.addButtonContainer}>
-                    <AppTouchableRipple
-                        style={[styles.addButton, { backgroundColor: colors.themePrimary }]}
-                        onPress={handleAddAddress}
-                    >
-                        <Icon name="plus" size={20} color={colors.white} />
-                        <Text style={[styles.addButtonText, { color: colors.white }]}>
-                            Add New Address
-                        </Text>
-                    </AppTouchableRipple>
-                </View>
+
 
                 {/* Address List */}
                 {addresses.length === 0 ? (
@@ -258,6 +247,19 @@ const AddressListScreen: React.FC<AddressListScreenProps> = ({ navigation }) => 
                         showsVerticalScrollIndicator={false}
                     />
                 )}
+
+                {/* Add Address Button */}
+                <View style={styles.addButtonContainer}>
+                    <AppTouchableRipple
+                        style={[styles.addButton, { backgroundColor: colors.themePrimary }]}
+                        onPress={handleAddAddress}
+                    >
+                        <Icon name="plus" size={20} color={colors.white} />
+                        <Text style={[styles.addButtonText, { color: colors.white }]}>
+                            Add New Address
+                        </Text>
+                    </AppTouchableRipple>
+                </View>
             </View>
         </MainContainer>
     );

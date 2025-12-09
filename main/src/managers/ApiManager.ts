@@ -69,18 +69,44 @@ export default class ApiManager {
             headers,
         };
 
-        if (method !== "GET") {
+        // Handle request body for non-GET requests
+        if (method !== "GET" && params) {
             options.body = isFormData ? (params as any) : JSON.stringify(params);
         }
 
         try {
-            console.log('📡 API Request:', {
-                url,
-                method,
-                isFormData,
-                hasToken: !!token,
-                headers,
-            });
+            // Enhanced logging in dev mode
+            if (__DEV__) {
+                console.log('═══════════════════════════════════════════════════════');
+                console.log('📡 API REQUEST INITIATED');
+                console.log('═══════════════════════════════════════════════════════');
+                console.log('🔗 Endpoint:', endpoint);
+                console.log('🌐 Full URL:', url);
+                console.log('📤 Method:', method);
+                console.log('🔑 Has Token:', !!token);
+                console.log('📦 Is FormData:', isFormData);
+                if (method !== "GET" && params) {
+                    if (isFormData) {
+                        console.log('📋 Payload: [FormData]');
+                        // Try to log FormData entries if possible
+                        if (params instanceof FormData) {
+                            const entries: any[] = [];
+                            // Note: FormData.entries() might not work in all React Native environments
+                            try {
+                                console.log('📋 FormData detected (entries may not be loggable)');
+                            } catch (e) {
+                                // Ignore
+                            }
+                        }
+                    } else {
+                        console.log('📋 Payload:', JSON.stringify(params, null, 2));
+                    }
+                } else if (method === "GET") {
+                    console.log('📋 Query Params: [GET request - params in URL]');
+                }
+                console.log('📨 Headers:', JSON.stringify(headers, null, 2));
+                console.log('═══════════════════════════════════════════════════════');
+            }
 
             const response = await fetch(url, options);
 
@@ -88,7 +114,17 @@ export default class ApiManager {
             try {
                 json = await response.json();
             } catch (parseError) {
-                console.error('❌ Failed to parse response:', parseError);
+                if (__DEV__) {
+                    console.error('═══════════════════════════════════════════════════════');
+                    console.error('❌ API RESPONSE PARSE ERROR');
+                    console.error('═══════════════════════════════════════════════════════');
+                    console.error('🔗 Endpoint:', endpoint);
+                    console.error('🌐 URL:', url);
+                    console.error('📤 Method:', method);
+                    console.error('📊 Status:', response.status);
+                    console.error('❌ Parse Error:', parseError);
+                    console.error('═══════════════════════════════════════════════════════');
+                }
                 const errorMsg = 'Invalid response from server';
                 if (showError) {
                     showToast({
@@ -100,17 +136,49 @@ export default class ApiManager {
                 throw new Error(errorMsg);
             }
 
-            console.log('📥 API Response:', {
-                status: response.status,
-                ok: response.ok,
-                data: json,
-            });
+            // Enhanced logging in dev mode
+            if (__DEV__) {
+                console.log('═══════════════════════════════════════════════════════');
+                console.log('📥 API RESPONSE RECEIVED');
+                console.log('═══════════════════════════════════════════════════════');
+                console.log('🔗 Endpoint:', endpoint);
+                console.log('🌐 URL:', url);
+                console.log('📤 Method:', method);
+                console.log('📊 Status Code:', response.status);
+                console.log('✅ Response OK:', response.ok);
+                console.log('📦 Response Data:', JSON.stringify(json, null, 2));
+                if (json.message) {
+                    console.log('💬 Message:', json.message);
+                }
+                if (json.success !== undefined) {
+                    console.log('✔️ Success:', json.success);
+                }
+                if (json.data) {
+                    console.log('📋 Data Type:', Array.isArray(json.data) ? 'Array' : typeof json.data);
+                    if (Array.isArray(json.data)) {
+                        console.log('📊 Data Count:', json.data.length);
+                    }
+                }
+                console.log('═══════════════════════════════════════════════════════');
+            }
 
             if (!response.ok) {
                 const errorMessage = json.message || json.error || "Request failed";
 
+                if (__DEV__) {
+                    console.warn('═══════════════════════════════════════════════════════');
+                    console.warn('⚠️ API REQUEST FAILED');
+                    console.warn('═══════════════════════════════════════════════════════');
+                    console.warn('🔗 Endpoint:', endpoint);
+                    console.warn('🌐 URL:', url);
+                    console.warn('📤 Method:', method);
+                    console.warn('📊 Status Code:', response.status);
+                    console.warn('❌ Error Message:', errorMessage);
+                    console.warn('📦 Error Response:', JSON.stringify(json, null, 2));
+                    console.warn('═══════════════════════════════════════════════════════');
+                }
+
                 if (showError) {
-                    console.warn(`❌ ${errorMessage}`);
                     showToast({
                         message: "Error",
                         description: errorMessage,
@@ -121,7 +189,9 @@ export default class ApiManager {
             }
 
             if (showSuccess && json.message) {
-                console.log(`✅ ${json.message}`);
+                if (__DEV__) {
+                    console.log('✅ Success Message:', json.message);
+                }
                 showToast({
                     message: "Success",
                     description: json.message,
@@ -131,9 +201,20 @@ export default class ApiManager {
 
             return json as ApiResponse<T>;
         } catch (err: any) {
-            if (showError && err.message) {
-                console.error("❌ API Error:", err);
+            if (__DEV__) {
+                console.error('═══════════════════════════════════════════════════════');
+                console.error('❌ API EXCEPTION OCCURRED');
+                console.error('═══════════════════════════════════════════════════════');
+                console.error('🔗 Endpoint:', endpoint);
+                console.error('🌐 URL:', url);
+                console.error('📤 Method:', method);
+                console.error('❌ Error:', err);
+                console.error('📝 Error Message:', err.message);
+                console.error('📚 Error Stack:', err.stack);
+                console.error('═══════════════════════════════════════════════════════');
+            }
 
+            if (showError && err.message) {
                 // Only show toast if we haven't already shown one
                 if (err.message !== "No internet connection" &&
                     err.message !== "Invalid response from server") {
@@ -151,17 +232,36 @@ export default class ApiManager {
     // 👉 Shortcut methods with enhanced options
     static get<T = any>({
         endpoint,
+        params,
         token,
         showError = true,
         showSuccess = false,
     }: {
         endpoint: string;
+        params?: Record<string, any>;
         token?: string;
         showError?: boolean;
         showSuccess?: boolean;
     }) {
+        // Build query string for GET requests
+        let finalEndpoint = endpoint;
+        if (params && Object.keys(params).length > 0) {
+            const queryString = Object.keys(params)
+                .filter(key => params[key] !== undefined && params[key] !== null)
+                .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
+                .join('&');
+            if (queryString) {
+                finalEndpoint = `${endpoint}${endpoint.includes('?') ? '&' : '?'}${queryString}`;
+            }
+        }
+
+        if (__DEV__ && params) {
+            console.log('🔍 GET Request Query Params:', params);
+            console.log('🔗 Final Endpoint with Query:', finalEndpoint);
+        }
+
         return this.request<T>({
-            endpoint,
+            endpoint: finalEndpoint,
             method: "GET",
             token,
             showError,
@@ -223,11 +323,13 @@ export default class ApiManager {
 
     static delete<T = any>({
         endpoint,
+        params,
         token,
         showError = true,
         showSuccess = false,
     }: {
         endpoint: string;
+        params?: any;
         token?: string;
         showError?: boolean;
         showSuccess?: boolean;
@@ -235,6 +337,7 @@ export default class ApiManager {
         return this.request<T>({
             endpoint,
             method: "DELETE",
+            params,
             token,
             showError,
             showSuccess,
