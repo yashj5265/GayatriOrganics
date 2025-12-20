@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
+import { Alert } from 'react-native';
 import StorageManager, { StorageKey } from '../managers/StorageManager';
 import ApiManager from '../managers/ApiManager';
 import constant from '../utilities/constant';
@@ -152,16 +153,135 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
                 return;
             }
 
+            // Validate price - it's required by the database
+            // Try multiple ways to extract a valid price
+            let itemPrice: number;
+
+            if (typeof item.price === 'number' && !isNaN(item.price) && item.price > 0) {
+                itemPrice = item.price;
+            } else if (typeof item.price === 'string') {
+                const parsed = parseFloat(item.price);
+                if (!isNaN(parsed) && parsed > 0) {
+                    itemPrice = parsed;
+                } else {
+                    itemPrice = 0;
+                }
+            } else {
+                itemPrice = 0;
+            }
+
+            // Final validation - price must be a positive number
+            if (!itemPrice || isNaN(itemPrice) || itemPrice <= 0) {
+                console.error('❌ Invalid price for cart item:', {
+                    item,
+                    originalPrice: item.price,
+                    priceType: typeof item.price,
+                    calculatedPrice: itemPrice
+                });
+                Alert.alert(
+                    'Error',
+                    `Cannot add "${item.name}" to cart: Invalid price (₹${item.price || 'N/A'}). Please try again.`
+                );
+                // Revert local state update
+                setCartItems((prevItems) => {
+                    const existingItem = prevItems.find((i) => i.id === item.id);
+                    if (existingItem && existingItem.quantity > quantityToAdd) {
+                        return prevItems.map((i) =>
+                            i.id === item.id ? { ...i, quantity: i.quantity - quantityToAdd } : i
+                        );
+                    } else {
+                        return prevItems.filter((i) => i.id !== item.id);
+                    }
+                });
+                return;
+            }
+
+            // Ensure price is a number (not string) for JSON serialization
+            itemPrice = Number(itemPrice);
+
             // Call API to add to cart
-            const apiPayload = {
-                category_id: item.categoryId,
-                product_id: item.productId,
-                quantity: quantityToAdd,
-                unit_type: item.unit || 'kg',
-                price: item.price,
-                delivery_charge: item.deliveryCharge || 0,
-                delivery_date: item.deliveryDate || new Date().toISOString().split('T')[0],
-            };
+            // Explicitly ensure all fields are properly typed and included
+            // IMPORTANT: price must be included as a number, not string
+            // Build payload step by step to ensure price is never lost
+            const apiPayload: Record<string, any> = {};
+
+            // Add required fields one by one
+            apiPayload.category_id = Number(item.categoryId);
+            apiPayload.product_id = Number(item.productId);
+            apiPayload.quantity = Number(quantityToAdd);
+            apiPayload.unit_type = String(item.unit || 'kg');
+            apiPayload.price = Number(itemPrice); // CRITICAL: Must be a number, required by database
+            apiPayload.delivery_charge = Number(item.deliveryCharge || 0);
+            apiPayload.delivery_date = String(item.deliveryDate || new Date().toISOString().split('T')[0]);
+
+            // Explicitly verify price was set
+            if (!('price' in apiPayload) || apiPayload.price === undefined || apiPayload.price === null || isNaN(apiPayload.price)) {
+                console.error('❌ CRITICAL: Price failed to be set in payload!', {
+                    itemPrice,
+                    item,
+                    apiPayload
+                });
+                apiPayload.price = Number(itemPrice); // Force set it again
+            }
+
+            // Final validation - ensure price is definitely included and valid
+            if (!apiPayload.price || isNaN(apiPayload.price) || apiPayload.price <= 0) {
+                console.error('❌ Price validation failed after payload creation:', {
+                    payload: apiPayload,
+                    itemPrice,
+                    originalItem: item
+                });
+                Alert.alert('Error', 'Invalid price. Cannot add item to cart.');
+                // Revert local state
+                setCartItems((prevItems) => {
+                    const existingItem = prevItems.find((i) => i.id === item.id);
+                    if (existingItem && existingItem.quantity > quantityToAdd) {
+                        return prevItems.map((i) =>
+                            i.id === item.id ? { ...i, quantity: i.quantity - quantityToAdd } : i
+                        );
+                    } else {
+                        return prevItems.filter((i) => i.id !== item.id);
+                    }
+                });
+                return;
+            }
+
+            // Log payload for debugging
+            if (__DEV__) {
+                console.log('🛒 Add to Cart Payload:', JSON.stringify(apiPayload, null, 2));
+                console.log('🛒 Price in payload:', apiPayload.price, 'Type:', typeof apiPayload.price);
+                console.log('🛒 All payload keys:', Object.keys(apiPayload));
+            }
+
+            // Final safety check - ensure price exists before API call
+            if (!('price' in apiPayload) || apiPayload.price === undefined || apiPayload.price === null) {
+                console.error('❌ CRITICAL: Price missing from payload before API call!', apiPayload);
+                Alert.alert('Error', 'Price information is missing. Cannot add item to cart.');
+                // Revert local state
+                setCartItems((prevItems) => {
+                    const existingItem = prevItems.find((i) => i.id === item.id);
+                    if (existingItem && existingItem.quantity > quantityToAdd) {
+                        return prevItems.map((i) =>
+                            i.id === item.id ? { ...i, quantity: i.quantity - quantityToAdd } : i
+                        );
+                    } else {
+                        return prevItems.filter((i) => i.id !== item.id);
+                    }
+                });
+                return;
+            }
+
+            // Log the exact payload being sent
+            if (__DEV__) {
+                console.log('🚀 Sending to API:', {
+                    endpoint: constant.apiEndPoints.addToCart,
+                    payload: apiPayload,
+                    priceIncluded: 'price' in apiPayload,
+                    priceValue: apiPayload.price,
+                    priceType: typeof apiPayload.price,
+                    payloadStringified: JSON.stringify(apiPayload),
+                });
+            }
 
             const response = await ApiManager.post({
                 endpoint: constant.apiEndPoints.addToCart,

@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, Image } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import MainContainer from '../../container/MainContainer';
@@ -9,6 +9,7 @@ import AppTouchableRipple from '../../components/AppTouchableRipple';
 import { useCart } from '../../contexts/CardContext';
 import EmptyData, { EmptyDataType } from '../../components/EmptyData';
 import constant from '../../utilities/constant';
+import { getImageUrl } from '../../components/listItems/utils';
 
 interface CartScreenProps {
     navigation: NativeStackNavigationProp<any>;
@@ -20,6 +21,7 @@ const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
     const colors = useTheme();
     const { cartItems, cartCount, cartTotal, updateQuantity, removeFromCart, clearCart } = useCart();
     const [processingItemId, setProcessingItemId] = useState<number | null>(null);
+    const [imageErrors, setImageErrors] = useState<Set<number>>(new Set());
 
     const deliveryCharge = cartItems.length > 0 ? DELIVERY_CHARGE : 0;
     const total = cartTotal + deliveryCharge;
@@ -75,13 +77,8 @@ const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
             return;
         }
 
-        // TODO: Navigate to checkout screen when implemented
-        Alert.alert(
-            'Checkout',
-            'Checkout functionality will be implemented soon',
-            [{ text: 'OK' }]
-        );
-    }, [cartItems.length]);
+        navigation.navigate(constant.routeName.checkout);
+    }, [cartItems.length, navigation]);
 
     // Empty Cart State
     if (cartItems.length === 0) {
@@ -172,6 +169,7 @@ const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
                         {cartItems.map((item) => {
                             const itemTotal = item.price * item.quantity;
                             const isProcessing = processingItemId === item.id;
+                            const hasImageError = imageErrors.has(item.id);
 
                             return (
                                 <View
@@ -184,9 +182,20 @@ const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
                                         },
                                     ]}
                                 >
-                                    {/* Item Image/Icon */}
+                                    {/* Item Image */}
                                     <View style={[styles.itemImageContainer, { backgroundColor: colors.themePrimaryLight }]}>
-                                        <Text style={styles.itemImage}>{item.image}</Text>
+                                        {item.image && !hasImageError ? (
+                                            <Image
+                                                source={{ uri: getImageUrl(item.image) }}
+                                                style={styles.itemImage}
+                                                resizeMode="cover"
+                                                onError={() => {
+                                                    setImageErrors(prev => new Set(prev).add(item.id));
+                                                }}
+                                            />
+                                        ) : (
+                                            <Icon name="image-off" size={32} color={colors.themePrimary} />
+                                        )}
                                     </View>
 
                                     {/* Item Details */}
@@ -474,7 +483,9 @@ const styles = StyleSheet.create({
         marginRight: 12,
     },
     itemImage: {
-        fontSize: 32,
+        width: '100%',
+        height: '100%',
+        borderRadius: 12,
     },
     itemDetails: {
         flex: 1,

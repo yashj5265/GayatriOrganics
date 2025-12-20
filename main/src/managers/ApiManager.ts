@@ -71,7 +71,20 @@ export default class ApiManager {
 
         // Handle request body for non-GET requests
         if (method !== "GET" && params) {
-            options.body = isFormData ? (params as any) : JSON.stringify(params);
+            if (isFormData) {
+                options.body = params as any;
+            } else {
+                // Ensure price field is included if it exists in params
+                // Sometimes JSON.stringify might skip certain values, so we ensure it's explicitly included
+                const sanitizedParams = { ...params };
+                if (sanitizedParams && typeof sanitizedParams === 'object' && 'price' in sanitizedParams) {
+                    // Ensure price is a valid number
+                    if (sanitizedParams.price !== undefined && sanitizedParams.price !== null) {
+                        sanitizedParams.price = Number(sanitizedParams.price);
+                    }
+                }
+                options.body = JSON.stringify(sanitizedParams);
+            }
         }
 
         try {
@@ -99,7 +112,18 @@ export default class ApiManager {
                             }
                         }
                     } else {
-                        console.log('📋 Payload:', JSON.stringify(params, null, 2));
+                        // Log payload with special attention to price field
+                        const payloadStr = JSON.stringify(params, null, 2);
+                        console.log('📋 Payload:', payloadStr);
+                        // Check if price exists in payload
+                        if (params && typeof params === 'object' && !Array.isArray(params)) {
+                            if ('price' in params) {
+                                console.log('✅ Price field found in payload:', params.price, 'Type:', typeof params.price);
+                            } else {
+                                console.error('❌ Price field MISSING from payload!');
+                                console.log('Available keys:', Object.keys(params));
+                            }
+                        }
                     }
                 } else if (method === "GET") {
                     console.log('📋 Query Params: [GET request - params in URL]');

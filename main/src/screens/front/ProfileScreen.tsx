@@ -165,9 +165,13 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
     const handleMenuPress = useCallback((route: string) => {
         if (route === 'Addresses') {
             navigation.navigate(constant.routeName.addressList);
+        } else if (route === 'MyOrders') {
+            navigation.navigate(constant.routeName.orders);
         } else {
-            // TODO: Implement navigation for other routes when available
-            console.log('Navigate to:', route);
+            // Future: Implement navigation for other routes when available
+            if (__DEV__) {
+                console.log('Navigate to:', route);
+            }
         }
     }, [navigation]);
 

@@ -40,9 +40,9 @@ export default {
         removeFromCart: '/api/cart/remove', // Use with :id
 
         // Orders
-        createOrder: '/api/order/create',
-        myOrders: '/api/user/orders',
-        getOrder: '/api/user/order',
+        createOrder: '/api/order/create-from-cart', // Create order from cart
+        myOrders: '/api/orders',
+        getOrder: '/api/order/', // Use with :id
     },
     shareInstanceKey: {
         authToken: StorageKey.TOKEN,
@@ -77,7 +77,9 @@ export default {
         mainTabs: "mainTabs",
         addressList: "addressList",
         addEditAddress: "addEditAddress",
-        wishlist: "wishlist"
+        wishlist: "wishlist",
+        checkout: "checkout",
+        orderDetail: "orderDetail"
     },
     // Response Codes
     responseCode: {

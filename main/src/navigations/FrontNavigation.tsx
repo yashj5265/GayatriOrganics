@@ -21,6 +21,9 @@ import { ProductDetailScreenProps } from '../screens/front/ProductDetailScreen';
 import AddressListScreen from '../screens/front/AddressListScreen';
 import AddEditAddressScreen from '../screens/front/AddEditAddressScreen';
 import WishlistScreen from '../screens/front/WishlistScreen';
+import CheckoutScreen from '../screens/front/CheckoutScreen';
+import OrdersScreen from '../screens/front/OrdersScreen';
+import OrderDetailScreen from '../screens/front/OrderDetailScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -199,6 +202,21 @@ const FrontNavigation: React.FC = React.memo(() => {
             <Stack.Screen
                 name={constant.routeName.wishlist}
                 component={WishlistScreen as any}
+            />
+
+            <Stack.Screen
+                name={constant.routeName.checkout}
+                component={CheckoutScreen as any}
+            />
+
+            <Stack.Screen
+                name={constant.routeName.orders}
+                component={OrdersScreen as any}
+            />
+
+            <Stack.Screen
+                name={constant.routeName.orderDetail}
+                component={OrderDetailScreen as any}
             />
         </Stack.Navigator>
     );
