@@ -750,7 +750,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     // ============================================================================
     const handleVoiceResult = useCallback(
         (text: string) => {
-            console.log('Voice result received:', text);
             const propsToSend: ProductListScreenProps = {
                 focusSearch: true,
                 initialQuery: text,
@@ -771,13 +770,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     });
 
     const handleVoiceButtonPress = useCallback(async () => {
-        console.log('Voice button pressed, isListening:', isListening);
-
         if (isListening) {
-            console.log('[HomeScreen] Stopping voice recognition...');
             await stopListening();
         } else {
-            console.log('[HomeScreen] Starting voice recognition...');
             try {
                 await startListening();
             } catch (error) {
@@ -790,7 +785,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         useCallback(() => {
             return () => {
                 if (isListening) {
-                    console.log('[HomeScreen] Screen losing focus, stopping voice recognition');
                     stopListening();
                 }
             };
@@ -801,7 +795,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     // BANNER HANDLERS
     // ============================================================================
     const handleBannerPress = useCallback((banner: Banner) => {
-        console.log('Banner pressed:', banner.title);
+        // Handle banner press
     }, []);
 
     // ============================================================================

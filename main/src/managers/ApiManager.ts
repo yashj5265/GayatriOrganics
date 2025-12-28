@@ -90,46 +90,12 @@ export default class ApiManager {
         try {
             // Enhanced logging in dev mode
             if (__DEV__) {
-                console.log('═══════════════════════════════════════════════════════');
-                console.log('📡 API REQUEST INITIATED');
-                console.log('═══════════════════════════════════════════════════════');
-                console.log('🔗 Endpoint:', endpoint);
-                console.log('🌐 Full URL:', url);
-                console.log('📤 Method:', method);
-                console.log('🔑 Has Token:', !!token);
-                console.log('📦 Is FormData:', isFormData);
-                if (method !== "GET" && params) {
-                    if (isFormData) {
-                        console.log('📋 Payload: [FormData]');
-                        // Try to log FormData entries if possible
-                        if (params instanceof FormData) {
-                            const entries: any[] = [];
-                            // Note: FormData.entries() might not work in all React Native environments
-                            try {
-                                console.log('📋 FormData detected (entries may not be loggable)');
-                            } catch (e) {
-                                // Ignore
-                            }
-                        }
-                    } else {
-                        // Log payload with special attention to price field
-                        const payloadStr = JSON.stringify(params, null, 2);
-                        console.log('📋 Payload:', payloadStr);
-                        // Check if price exists in payload
-                        if (params && typeof params === 'object' && !Array.isArray(params)) {
-                            if ('price' in params) {
-                                console.log('✅ Price field found in payload:', params.price, 'Type:', typeof params.price);
-                            } else {
-                                console.error('❌ Price field MISSING from payload!');
-                                console.log('Available keys:', Object.keys(params));
-                            }
-                        }
+                // Check if price exists in payload for debugging
+                if (method !== "GET" && params && typeof params === 'object' && !Array.isArray(params)) {
+                    if (!('price' in params)) {
+                        console.error('❌ Price field MISSING from payload!');
                     }
-                } else if (method === "GET") {
-                    console.log('📋 Query Params: [GET request - params in URL]');
                 }
-                console.log('📨 Headers:', JSON.stringify(headers, null, 2));
-                console.log('═══════════════════════════════════════════════════════');
             }
 
             const response = await fetch(url, options);
@@ -160,47 +126,9 @@ export default class ApiManager {
                 throw new Error(errorMsg);
             }
 
-            // Enhanced logging in dev mode
-            if (__DEV__) {
-                console.log('═══════════════════════════════════════════════════════');
-                console.log('📥 API RESPONSE RECEIVED');
-                console.log('═══════════════════════════════════════════════════════');
-                console.log('🔗 Endpoint:', endpoint);
-                console.log('🌐 URL:', url);
-                console.log('📤 Method:', method);
-                console.log('📊 Status Code:', response.status);
-                console.log('✅ Response OK:', response.ok);
-                console.log('📦 Response Data:', JSON.stringify(json, null, 2));
-                if (json.message) {
-                    console.log('💬 Message:', json.message);
-                }
-                if (json.success !== undefined) {
-                    console.log('✔️ Success:', json.success);
-                }
-                if (json.data) {
-                    console.log('📋 Data Type:', Array.isArray(json.data) ? 'Array' : typeof json.data);
-                    if (Array.isArray(json.data)) {
-                        console.log('📊 Data Count:', json.data.length);
-                    }
-                }
-                console.log('═══════════════════════════════════════════════════════');
-            }
 
             if (!response.ok) {
                 const errorMessage = json.message || json.error || "Request failed";
-
-                if (__DEV__) {
-                    console.warn('═══════════════════════════════════════════════════════');
-                    console.warn('⚠️ API REQUEST FAILED');
-                    console.warn('═══════════════════════════════════════════════════════');
-                    console.warn('🔗 Endpoint:', endpoint);
-                    console.warn('🌐 URL:', url);
-                    console.warn('📤 Method:', method);
-                    console.warn('📊 Status Code:', response.status);
-                    console.warn('❌ Error Message:', errorMessage);
-                    console.warn('📦 Error Response:', JSON.stringify(json, null, 2));
-                    console.warn('═══════════════════════════════════════════════════════');
-                }
 
                 if (showError) {
                     showToast({
@@ -213,9 +141,6 @@ export default class ApiManager {
             }
 
             if (showSuccess && json.message) {
-                if (__DEV__) {
-                    console.log('✅ Success Message:', json.message);
-                }
                 showToast({
                     message: "Success",
                     description: json.message,
@@ -279,10 +204,6 @@ export default class ApiManager {
             }
         }
 
-        if (__DEV__ && params) {
-            console.log('🔍 GET Request Query Params:', params);
-            console.log('🔗 Final Endpoint with Query:', finalEndpoint);
-        }
 
         return this.request<T>({
             endpoint: finalEndpoint,

@@ -31,7 +31,6 @@ export const VoiceSearchProvider: React.FC<VoiceSearchProviderProps> = ({ childr
             const voiceModule = voiceModuleRef.current;
 
             if (!voiceModule) {
-                console.warn('[VoiceSearchContext] Voice module is not available');
                 setIsAvailable(false);
                 return;
             }
@@ -41,9 +40,7 @@ export const VoiceSearchProvider: React.FC<VoiceSearchProviderProps> = ({ childr
                     await new Promise(resolve => setTimeout(resolve, 500));
                     const available = await voiceModule.isAvailable();
                     setIsAvailable(available);
-                    console.log('[VoiceSearchContext] Voice recognition available:', available);
                 } catch (err: any) {
-                    console.warn('[VoiceSearchContext] Availability check failed:', err);
                     setIsAvailable(true); // Optimistically allow usage
                 }
             } else if (typeof voiceModule.start === 'function') {
@@ -70,28 +67,23 @@ export const VoiceSearchProvider: React.FC<VoiceSearchProviderProps> = ({ childr
 
         // Set up event handlers
         voiceModule.onSpeechStart = () => {
-            console.log('[VoiceSearchContext] onSpeechStart event received');
             setIsListening(true);
             setError(null);
         };
 
         voiceModule.onSpeechEnd = () => {
-            console.log('[VoiceSearchContext] onSpeechEnd event received');
             setIsListening(false);
         };
 
         voiceModule.onSpeechResults = (e: any) => {
-            console.log('[VoiceSearchContext] onSpeechResults event received', e);
             if (e && e.value && e.value.length > 0) {
                 const recognizedText = e.value[0];
-                console.log('[VoiceSearchContext] Recognized text:', recognizedText);
                 currentCallbacks.current.onResult?.(recognizedText);
             }
             setIsListening(false);
         };
 
         voiceModule.onSpeechError = (e: any) => {
-            console.log('[VoiceSearchContext] onSpeechError event received', e);
             const errorMessage = e?.error?.message || e?.message || e?.toString() || 'Speech recognition error';
             setError(errorMessage);
             setIsListening(false);
@@ -99,13 +91,14 @@ export const VoiceSearchProvider: React.FC<VoiceSearchProviderProps> = ({ childr
         };
 
         isInitialized.current = true;
-        console.log('[VoiceSearchContext] Voice event handlers initialized');
 
         return () => {
             if (isInitialized.current && voiceModule) {
                 // Stop listening if active
                 if (isListening) {
-                    voiceModule.stop().catch(console.warn);
+                    voiceModule.stop().catch(() => {
+                        // Error stopping voice recognition
+                    });
                 }
                 // Clean up listeners
                 if (voiceModule.removeAllListeners && typeof voiceModule.removeAllListeners === 'function') {
@@ -146,7 +139,6 @@ export const VoiceSearchProvider: React.FC<VoiceSearchProviderProps> = ({ childr
         language: string = 'en-US'
     ) => {
         try {
-            console.log('[VoiceSearchContext] Starting voice recognition...');
             const voiceModule = voiceModuleRef.current;
 
             if (!voiceModule) {
@@ -187,13 +179,11 @@ export const VoiceSearchProvider: React.FC<VoiceSearchProviderProps> = ({ childr
                     await voiceModule.cancel();
                 }
             } catch (cancelErr) {
-                console.log('[VoiceSearchContext] No existing recognition to cancel');
+                // No existing recognition to cancel
             }
 
             // Start new recognition
-            console.log('[VoiceSearchContext] Starting Voice.start with language:', language);
             await voiceModule.start(language);
-            console.log('[VoiceSearchContext] Voice.start called successfully');
             
             // Set listening state optimistically
             setIsListening(true);
@@ -228,7 +218,6 @@ export const VoiceSearchProvider: React.FC<VoiceSearchProviderProps> = ({ childr
         try {
             await voiceModule.stop();
             setIsListening(false);
-            console.log('[VoiceSearchContext] Voice.stop called successfully');
         } catch (err: any) {
             console.error('[VoiceSearchContext] Error stopping voice recognition:', err);
             setIsListening(false);

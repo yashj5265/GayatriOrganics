@@ -340,9 +340,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
                     break;
                 default:
                     // Future: Implement navigation for other routes when available
-                    if (__DEV__) {
-                        console.log('Navigate to:', route);
-                    }
                     break;
             }
         },
@@ -364,7 +361,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
                         token: token,
                     });
                 } catch (apiError) {
-                    console.log('Logout API error (continuing anyway):', apiError);
+                    // Logout API error (continuing anyway)
                 }
             }
 

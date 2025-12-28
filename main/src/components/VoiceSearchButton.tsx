@@ -29,7 +29,6 @@ const VoiceSearchButton: React.FC<VoiceSearchButtonProps> = memo(({
     const isDisabled = disabled;
 
     const handlePress = () => {
-        console.log('Voice button pressed, isListening:', isListening, 'isAvailable:', isAvailable);
         if (onPress) {
             onPress();
         }

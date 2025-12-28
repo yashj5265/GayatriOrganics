@@ -302,7 +302,6 @@ const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ navigation }) => {
     }, []);
 
     const handleVoiceResult = useCallback((text: string) => {
-        console.log('Voice result received:', text);
         setSearchQuery(text);
 
         // Focus the input after voice search
@@ -325,7 +324,6 @@ const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ navigation }) => {
     });
 
     const handleVoicePress = useCallback(() => {
-        console.log('Voice button pressed, isListening:', isListening);
         if (isListening) {
             stopListening();
         } else {

@@ -438,10 +438,6 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ navigation, route
                 showError: true,
             });
 
-            if (__DEV__) {
-                console.log('✅ Order Detail Response:', response);
-            }
-
             const orderData = extractOrderData(response);
 
             if (orderData) {

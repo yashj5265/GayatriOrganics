@@ -92,8 +92,6 @@ const VerifyOTPScreen: React.FC<VerifyOTPScreenProps> = ({ navigation, route }) 
     //     setLoading(true);
 
     //     try {
-    //         console.log('🔐 Verifying OTP for:', mobile);
-
     //         const response: VerifyOTPResponse = await ApiManager.post({
     //             endpoint: constant.apiEndPoints.verifyOTP,
     //             params: {
@@ -101,8 +99,6 @@ const VerifyOTPScreen: React.FC<VerifyOTPScreenProps> = ({ navigation, route }) 
     //                 otp: parseInt(otp),
     //             },
     //         });
-
-    //         console.log('✅ Verify OTP Response:', response);
 
     //         if (response?.success || response?.token) {
     //             const token = response?.token;
@@ -117,8 +113,6 @@ const VerifyOTPScreen: React.FC<VerifyOTPScreenProps> = ({ navigation, route }) 
 
     //             // Use AuthContext login function
     //             await login(token, userData);
-
-    //             console.log('✅ Login successful! Navigation will happen automatically.');
 
     //             Alert.alert('Success', response?.message || 'Login successful!');
 

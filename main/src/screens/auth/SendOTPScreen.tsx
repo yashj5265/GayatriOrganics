@@ -53,16 +53,12 @@ const SendOTPScreen: React.FC<Props> = ({ navigation }) => {
         setLoading(true);
 
         try {
-            console.log('📞 Sending OTP to:', mobile);
-
             const response: SendOTPResponse = await ApiManager.post({
                 endpoint: constant.apiEndPoints.sendOTP,
                 params: {
                     mobile: mobile.trim(),
                 },
             });
-
-            console.log('✅ OTP Response:', response);
 
             // Check if response has message (indicating success)
             if (response?.message) {
@@ -119,8 +115,6 @@ const SendOTPScreen: React.FC<Props> = ({ navigation }) => {
 
     //     setLoading(true);
 
-    //     console.log('📞 Sending OTP to:', mobile);
-
     //     ApiManager.post({
     //         endpoint: constant.apiEndPoints.sendOTP,
     //         params: {
@@ -128,8 +122,6 @@ const SendOTPScreen: React.FC<Props> = ({ navigation }) => {
     //         }
     //     })
     //         .then((response: SendOTPResponse) => {
-    //             console.log('✅ OTP Response:', response);
-
     //             if (response?.success) {
     //                 Alert.alert(
     //                     'Success',

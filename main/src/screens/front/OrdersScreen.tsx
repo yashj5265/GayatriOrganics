@@ -373,10 +373,6 @@ const OrdersScreen: React.FC<OrdersScreenProps> = ({ navigation }) => {
                 showError: true,
             });
 
-            if (__DEV__) {
-                console.log('✅ Orders Response:', response);
-            }
-
             const ordersData = extractOrdersData(response);
             setOrders(ordersData);
         } catch (error: any) {

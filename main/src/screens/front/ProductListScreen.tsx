@@ -490,7 +490,6 @@ const ProductListScreen: React.FC<ProductListScreenNavigationProps> = ({
     }, []);
 
     const handleVoiceResult = useCallback((text: string) => {
-        console.log('Voice result received:', text);
         setSearchQuery(text);
         setTimeout(() => {
             searchInputRef.current?.focus();
@@ -512,7 +511,6 @@ const ProductListScreen: React.FC<ProductListScreenNavigationProps> = ({
         });
 
     const handleVoicePress = useCallback(() => {
-        console.log('Voice button pressed, isListening:', isListening);
         if (isListening) {
             stopListening();
         } else {

@@ -67,8 +67,6 @@ function createVoiceWrapper(nativeModule: any): any {
                 events.forEach(eventName => {
                     // Use DeviceEventEmitter directly - it works with both architectures
                     const listener = DeviceEventEmitter.addListener(eventName, (data: any) => {
-                        console.log(`[VoiceBridge] Event received: ${eventName}`, data);
-                        
                         // Map RCTVoice_ prefixed events to regular event names
                         const mappedEventName = eventName.startsWith('RCTVoice_') 
                             ? eventName.replace('RCTVoice_', '') 
@@ -76,16 +74,11 @@ function createVoiceWrapper(nativeModule: any): any {
                         
                         if (wrapper[mappedEventName as keyof typeof wrapper] && 
                             typeof wrapper[mappedEventName as keyof typeof wrapper] === 'function') {
-                            console.log(`[VoiceBridge] Calling handler for ${mappedEventName}`);
                             (wrapper[mappedEventName as keyof typeof wrapper] as Function)(data);
-                        } else {
-                            console.log(`[VoiceBridge] No handler found for ${mappedEventName}`);
                         }
                     });
                     listeners.push(listener);
                 });
-                
-                console.log('[VoiceBridge] Event listeners set up for', events.length, 'events');
             }
         },
 
@@ -208,7 +201,6 @@ function createVoiceWrapper(nativeModule: any): any {
             this.onSpeechPartialResults = undefined;
             this.onSpeechRecognized = undefined;
             this.onSpeechVolumeChanged = undefined;
-            console.log('[VoiceBridge] Event handlers cleared (DeviceEventEmitter listeners remain active)');
         },
 
         // Check if recognizing
@@ -242,28 +234,16 @@ export function initializeVoiceModule(): any {
         const nativeModule = NativeModules[NATIVE_MODULE_NAME];
         
         if (!nativeModule) {
-            console.warn('[VoiceBridge] Native module RCTVoice not found in NativeModules');
-            if (__DEV__) {
-                const voiceModules = Object.keys(NativeModules).filter(k => 
-                    k.toLowerCase().includes('voice') || k.toLowerCase().includes('speech')
-                );
-                console.log('[VoiceBridge] Available voice-related modules:', voiceModules);
-                console.log('[VoiceBridge] All NativeModules keys:', Object.keys(NativeModules).slice(0, 20));
-            }
             return null;
         }
-
-        console.log('[VoiceBridge] Found native module RCTVoice');
 
         // Step 2: Create custom wrapper that works with new architecture
         VoiceModule = createVoiceWrapper(nativeModule);
 
         if (VoiceModule) {
             isInitialized = true;
-            console.log('[VoiceBridge] Voice module wrapper created successfully');
             return VoiceModule;
         } else {
-            console.warn('[VoiceBridge] Failed to create voice wrapper');
             return null;
         }
     } catch (error) {

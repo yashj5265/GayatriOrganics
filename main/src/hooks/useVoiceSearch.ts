@@ -36,7 +36,6 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
             const voiceModule = getVoiceModule();
 
             if (!voiceModule || !isVoiceModuleAvailable()) {
-                console.warn('[useVoiceSearch] Voice module is not available. Please rebuild the app.');
                 setIsAvailable(false);
                 return;
             }
@@ -48,16 +47,13 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
                     await new Promise(resolve => setTimeout(resolve, 500));
                     const available = await voiceModule.isAvailable();
                     setIsAvailable(available);
-                    console.log('[useVoiceSearch] Voice recognition available:', available);
                 } else if (typeof voiceModule.start === 'function') {
                     // If isAvailable doesn't exist but start does, assume it might work
-                    console.warn('[useVoiceSearch] Voice.isAvailable not found, but Voice.start exists - will check on first use');
                     setIsAvailable(true); // Optimistically set to true, will fail gracefully on use
                 } else {
                     setIsAvailable(false);
                 }
             } catch (err: any) {
-                console.warn('[useVoiceSearch] Voice recognition availability check failed:', err);
                 const errorMsg = err?.message || err?.toString() || '';
                 // If error is about null or Cannot read property, the module isn't linked
                 if (errorMsg.includes('null') ||
@@ -68,7 +64,6 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
                     setIsAvailable(false);
                 } else {
                     // Other errors - might be permission or device issue, allow users to try
-                    console.log('[useVoiceSearch] Availability check error (may be recoverable):', errorMsg);
                     setIsAvailable(true);
                 }
             }
@@ -86,29 +81,24 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
         const voiceModule = getVoiceModule();
 
         if (!voiceModule) {
-            console.warn('[useVoiceSearch] Voice module not available for initialization');
             return;
         }
 
         // Always set up event handlers (they can be updated when callbacks change)
         voiceModule.onSpeechStart = (e?: any) => {
-            console.log('[useVoiceSearch] onSpeechStart event received', e);
             setIsListening(true);
             setError(null);
             isStartingRef.current = false;
         };
 
         voiceModule.onSpeechEnd = (e?: any) => {
-            console.log('[useVoiceSearch] onSpeechEnd event received', e);
             setIsListening(false);
             isStartingRef.current = false;
         };
 
         voiceModule.onSpeechResults = (e: any) => {
-            console.log('[useVoiceSearch] onSpeechResults event received', e);
             if (e && e.value && e.value.length > 0) {
                 const recognizedText = e.value[0];
-                console.log('[useVoiceSearch] Recognized text:', recognizedText);
                 onResult?.(recognizedText);
             }
             setIsListening(false);
@@ -116,7 +106,6 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
         };
 
         voiceModule.onSpeechError = (e: any) => {
-            console.log('[useVoiceSearch] onSpeechError event received', e);
             const errorMessage = e?.error?.message || e?.message || e?.toString() || 'Speech recognition error';
             setError(errorMessage);
             setIsListening(false);
@@ -125,13 +114,11 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
         };
 
         voiceModule.onSpeechPartialResults = (e: any) => {
-            console.log('[useVoiceSearch] onSpeechPartialResults event received', e);
             // Handle partial results if needed
         };
 
         if (!isInitialized.current) {
             isInitialized.current = true;
-            console.log('[useVoiceSearch] Voice event handlers initialized');
         }
 
         // Cleanup only on unmount, not when callbacks change
@@ -169,20 +156,17 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
     const startListening = useCallback(async () => {
         // Prevent multiple simultaneous starts
         if (isStartingRef.current) {
-            console.log('[useVoiceSearch] Already starting, ignoring duplicate call');
             return;
         }
 
         // If already listening, don't start again
         if (isListening) {
-            console.log('[useVoiceSearch] Already listening, ignoring start call');
             return;
         }
 
         isStartingRef.current = true;
 
         try {
-            console.log('[useVoiceSearch] Starting voice recognition...');
 
             const voiceModule = getVoiceModule();
 
@@ -214,38 +198,36 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
                 if (voiceModule.isRecognizing && typeof voiceModule.isRecognizing === 'function') {
                     const isRecognizing = await voiceModule.isRecognizing();
                     if (isRecognizing) {
-                        console.log('[useVoiceSearch] Module is already recognizing, stopping first...');
                         if (voiceModule.stop && typeof voiceModule.stop === 'function') {
                             await voiceModule.stop().catch((err: any) => {
-                                console.log('[useVoiceSearch] Error stopping:', err);
+                                // Error stopping
                             });
                         }
                         await new Promise(resolve => setTimeout(resolve, 200));
                         if (voiceModule.cancel && typeof voiceModule.cancel === 'function') {
                             await voiceModule.cancel().catch((err: any) => {
-                                console.log('[useVoiceSearch] Error canceling:', err);
+                                // Error canceling
                             });
                         }
                         await new Promise(resolve => setTimeout(resolve, 200));
                     }
                 } else {
                     // If isRecognizing is not available, always try to stop/cancel to be safe
-                    console.log('[useVoiceSearch] Stopping any existing recognition...');
                     if (voiceModule.stop && typeof voiceModule.stop === 'function') {
                         await voiceModule.stop().catch((err: any) => {
-                            console.log('[useVoiceSearch] Error stopping (may not be active):', err);
+                            // Error stopping (may not be active)
                         });
                     }
                     await new Promise(resolve => setTimeout(resolve, 200));
                     if (voiceModule.cancel && typeof voiceModule.cancel === 'function') {
                         await voiceModule.cancel().catch((err: any) => {
-                            console.log('[useVoiceSearch] Error canceling (may not be active):', err);
+                            // Error canceling (may not be active)
                         });
                     }
                     await new Promise(resolve => setTimeout(resolve, 200));
                 }
             } catch (cleanupErr) {
-                console.log('[useVoiceSearch] Error during cleanup:', cleanupErr);
+                // Error during cleanup
             }
 
             // Reset listening state before starting
@@ -254,23 +236,19 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
 
             // Ensure event handlers are set (they should already be set by useEffect, but ensure they're current)
             voiceModule.onSpeechStart = (e?: any) => {
-                console.log('[useVoiceSearch] onSpeechStart event received', e);
                 setIsListening(true);
                 setError(null);
                 isStartingRef.current = false;
             };
 
             voiceModule.onSpeechEnd = (e?: any) => {
-                console.log('[useVoiceSearch] onSpeechEnd event received', e);
                 setIsListening(false);
                 isStartingRef.current = false;
             };
 
             voiceModule.onSpeechResults = (e: any) => {
-                console.log('[useVoiceSearch] onSpeechResults event received', e);
                 if (e && e.value && e.value.length > 0) {
                     const recognizedText = e.value[0];
-                    console.log('[useVoiceSearch] Recognized text:', recognizedText);
                     onResult?.(recognizedText);
                 }
                 setIsListening(false);
@@ -278,7 +256,6 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
             };
 
             voiceModule.onSpeechError = (e: any) => {
-                console.log('[useVoiceSearch] onSpeechError event received', e);
                 const errorMessage = e?.error?.message || e?.message || e?.toString() || 'Speech recognition error';
                 setError(errorMessage);
                 setIsListening(false);
@@ -288,19 +265,15 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
 
             if (!isInitialized.current) {
                 isInitialized.current = true;
-                console.log('[useVoiceSearch] Voice event handlers initialized');
             }
 
             // Start new recognition
-            console.log('[useVoiceSearch] Starting Voice.start with language:', language);
             await voiceModule.start(language);
-            console.log('[useVoiceSearch] Voice.start called successfully');
 
             // Note: isListening will be set to true by onSpeechStart event
             // If onSpeechStart doesn't fire within 2 seconds, reset the starting flag
             setTimeout(() => {
                 if (isStartingRef.current && !isListening) {
-                    console.warn('[useVoiceSearch] onSpeechStart did not fire, resetting state');
                     isStartingRef.current = false;
                 }
             }, 2000);
@@ -336,7 +309,6 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
     const stopListening = useCallback(async () => {
         // Prevent multiple simultaneous stops
         if (isStoppingRef.current) {
-            console.log('[useVoiceSearch] Already stopping, ignoring duplicate call');
             return;
         }
 
@@ -350,14 +322,13 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
         }
 
         try {
-            console.log('[useVoiceSearch] Stopping voice recognition...');
             // Reset starting flag in case we were in the middle of starting
             isStartingRef.current = false;
             
             // First try to stop
             if (voiceModule.stop && typeof voiceModule.stop === 'function') {
                 await voiceModule.stop().catch((err: any) => {
-                    console.log('[useVoiceSearch] Error stopping:', err);
+                    // Error stopping
                 });
             }
             // Small delay before canceling
@@ -366,12 +337,11 @@ export const useVoiceSearch = (options: UseVoiceSearchOptions = {}): UseVoiceSea
             // Then try to cancel to ensure clean state
             if (voiceModule.cancel && typeof voiceModule.cancel === 'function') {
                 await voiceModule.cancel().catch((err: any) => {
-                    console.log('[useVoiceSearch] Error canceling:', err);
+                    // Error canceling
                 });
             }
             
             setIsListening(false);
-            console.log('[useVoiceSearch] Voice recognition stopped');
         } catch (err: any) {
             console.error('[useVoiceSearch] Error stopping voice recognition:', err);
             setIsListening(false);
