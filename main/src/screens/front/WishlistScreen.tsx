@@ -1,116 +1,263 @@
-import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, RefreshControl, TouchableOpacity } from 'react-native';
+import React, { useState, useCallback, useMemo, memo } from 'react';
+import { View, Text, StyleSheet, FlatList, RefreshControl } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useFocusEffect } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+
 import MainContainer from '../../container/MainContainer';
 import { useTheme } from '../../contexts/ThemeProvider';
-import fonts from '../../styles/fonts';
-import AppTouchableRipple from '../../components/AppTouchableRipple';
-import EmptyData, { EmptyDataType } from '../../components/EmptyData';
 import { useWishlist, WishlistItem } from '../../contexts/WishlistContext';
 import { useCart } from '../../contexts/CardContext';
-import { ProductDetailScreenProps } from './ProductDetailScreen';
+import AppTouchableRipple from '../../components/AppTouchableRipple';
+import EmptyData, { EmptyDataType } from '../../components/EmptyData';
 import { ProductGridItem, ProductListItem } from '../../components/listItems';
+import fonts from '../../styles/fonts';
 import constant from '../../utilities/constant';
+import { ProductDetailScreenProps } from './ProductDetailScreen';
 
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+const GRID_COLUMNS = 3;
+const REFRESH_TIMEOUT_MS = 1000;
+
+// ============================================================================
+// TYPES
+// ============================================================================
 interface WishlistScreenNavigationProps {
     navigation: NativeStackNavigationProp<any>;
 }
 
+type ViewMode = 'grid' | 'list';
+
+interface WishlistHeaderProps {
+    itemCount: number;
+    viewMode: ViewMode;
+    onBack: () => void;
+    onToggleView: () => void;
+}
+
+interface Product {
+    id: number;
+    category_id: number;
+    name: string;
+    description: string;
+    price: string;
+    stock: number;
+    image1: string;
+    image2: string | null;
+    image3: string | null;
+    image4: string | null;
+    image5: string | null;
+    created_at: string;
+    updated_at: string;
+    category: any;
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+const getItemWord = (count: number): string => {
+    return count === 1 ? 'item' : 'items';
+};
+
+const convertWishlistItemToProduct = (item: WishlistItem): Product => {
+    return {
+        ...item,
+        category_id: item.category_id,
+        image2: null,
+        image3: null,
+        image4: null,
+        image5: null,
+        created_at: '',
+        updated_at: '',
+    };
+};
+
+// ============================================================================
+// SUB COMPONENTS
+// ============================================================================
+const WishlistHeader = memo(({
+    itemCount,
+    viewMode,
+    onBack,
+    onToggleView,
+}: WishlistHeaderProps) => {
+    const colors = useTheme();
+
+    return (
+        <View style={[styles.header, { backgroundColor: colors.themePrimary }]}>
+            <View style={styles.headerTop}>
+                <AppTouchableRipple style={styles.backButton} onPress={onBack}>
+                    <Icon name="arrow-left" size={24} color={colors.white} />
+                </AppTouchableRipple>
+
+                <View style={styles.headerCenter}>
+                    <Text style={[styles.headerTitle, { color: colors.white }]}>
+                        My Wishlist
+                    </Text>
+                    <Text style={[styles.headerSubtitle, { color: colors.white }]}>
+                        {itemCount} {getItemWord(itemCount)}
+                    </Text>
+                </View>
+
+                <AppTouchableRipple style={styles.viewToggle} onPress={onToggleView}>
+                    <Icon
+                        name={viewMode === 'grid' ? 'view-list' : 'view-grid'}
+                        size={24}
+                        color={colors.white}
+                    />
+                </AppTouchableRipple>
+            </View>
+        </View>
+    );
+});
+
+const EmptyWishlist = memo(() => (
+    <EmptyData
+        type={EmptyDataType.NO_RECORDS}
+        title="Your Wishlist is Empty"
+        description="Start adding products to your wishlist to save them for later"
+    />
+));
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
 const WishlistScreen: React.FC<WishlistScreenNavigationProps> = ({ navigation }) => {
     const colors = useTheme();
     const insets = useSafeAreaInsets();
     const { wishlistItems, removeFromWishlist, isInWishlist } = useWishlist();
     const { addToCart, isInCart } = useCart();
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+
+    // ============================================================================
+    // STATE
+    // ============================================================================
+    const [viewMode, setViewMode] = useState<ViewMode>('grid');
     const [refreshing, setRefreshing] = useState(false);
 
+    // ============================================================================
+    // COMPUTED VALUES
+    // ============================================================================
+    const listContentStyle = useMemo(
+        () => ({
+            ...styles.listContainer,
+            paddingBottom: 100 + insets.bottom,
+        }),
+        [insets.bottom]
+    );
+
+    const hasItems = wishlistItems.length > 0;
+
+    // ============================================================================
+    // HANDLERS
+    // ============================================================================
     const handleRefresh = useCallback(() => {
         setRefreshing(true);
         setTimeout(() => {
             setRefreshing(false);
-        }, 1000);
+        }, REFRESH_TIMEOUT_MS);
     }, []);
 
-    const handleProductPress = useCallback((product: WishlistItem) => {
-        const propsToSend: ProductDetailScreenProps = {
-            productId: product.id
-        };
-        navigation.navigate(constant.routeName.productDetail, propsToSend);
+    const handleToggleView = useCallback(() => {
+        setViewMode((prev) => (prev === 'grid' ? 'list' : 'grid'));
+    }, []);
+
+    const handleGoBack = useCallback(() => {
+        navigation.goBack();
     }, [navigation]);
 
-    const handleAddToCart = useCallback((product: WishlistItem) => {
-        if (product.stock === 0) return;
+    const handleProductPress = useCallback(
+        (product: WishlistItem) => {
+            const propsToSend: ProductDetailScreenProps = {
+                productId: product.id,
+            };
+            navigation.navigate(constant.routeName.productDetail, propsToSend);
+        },
+        [navigation]
+    );
 
-        addToCart({
-            id: product.id,
-            name: product.name,
-            price: parseFloat(product.price),
-            image: product.image1,
-            unit: 'pc',
-            quantity: 1,
-            categoryId: product.category_id || product.category?.id,
-            productId: product.id,
-        });
-    }, [addToCart]);
+    const handleAddToCart = useCallback(
+        (product: WishlistItem) => {
+            if (product.stock === 0) return;
 
-    const handleRemoveFromWishlist = useCallback((productId: number) => {
-        removeFromWishlist(productId);
-    }, [removeFromWishlist]);
+            addToCart({
+                id: product.id,
+                name: product.name,
+                price: parseFloat(product.price),
+                image: product.image1,
+                unit: 'pc',
+                quantity: 1,
+                categoryId: product.category_id || product.category?.id,
+                productId: product.id,
+            });
+        },
+        [addToCart]
+    );
 
-    const handleToggleFavorite = useCallback((product: WishlistItem) => {
-        if (isInWishlist(product.id)) {
-            handleRemoveFromWishlist(product.id);
-        } else {
-            // This shouldn't happen in wishlist screen, but handle it anyway
-        }
-    }, [isInWishlist, handleRemoveFromWishlist]);
+    const handleToggleFavorite = useCallback(
+        (product: WishlistItem) => {
+            // In wishlist screen, this always removes from wishlist
+            removeFromWishlist(product.id);
+        },
+        [removeFromWishlist]
+    );
 
-    // Convert WishlistItem to Product format for list items
-    const convertToProduct = useCallback((item: WishlistItem) => {
-        return {
-            ...item,
-            category_id: item.category_id,
-            image2: null,
-            image3: null,
-            image4: null,
-            image5: null,
-            created_at: '',
-            updated_at: '',
-        };
-    }, []);
+    // ============================================================================
+    // RENDER FUNCTIONS
+    // ============================================================================
+    const renderGridItem = useCallback(
+        ({ item }: { item: WishlistItem }) => (
+            <ProductGridItem
+                item={convertWishlistItemToProduct(item)}
+                onPress={handleProductPress}
+                onAddToCart={handleAddToCart}
+                isInCart={isInCart(item.id)}
+                colors={colors}
+                onToggleFavorite={handleToggleFavorite}
+                isFavorite={isInWishlist(item.id)}
+            />
+        ),
+        [
+            handleProductPress,
+            handleAddToCart,
+            isInCart,
+            colors,
+            handleToggleFavorite,
+            isInWishlist,
+        ]
+    );
 
-    const renderGridItem = useCallback(({ item }: { item: WishlistItem }) => (
-        <ProductGridItem
-            item={convertToProduct(item)}
-            onPress={handleProductPress}
-            onAddToCart={handleAddToCart}
-            isInCart={isInCart(item.id)}
-            colors={colors}
-            onToggleFavorite={handleToggleFavorite}
-            isFavorite={isInWishlist(item.id)}
-        />
-    ), [handleProductPress, handleAddToCart, isInCart, colors, handleToggleFavorite, isInWishlist, convertToProduct]);
+    const renderListItem = useCallback(
+        ({ item }: { item: WishlistItem }) => (
+            <ProductListItem
+                item={convertWishlistItemToProduct(item)}
+                onPress={handleProductPress}
+                onAddToCart={handleAddToCart}
+                isInCart={isInCart(item.id)}
+                colors={colors}
+                onToggleFavorite={handleToggleFavorite}
+                isFavorite={isInWishlist(item.id)}
+            />
+        ),
+        [
+            handleProductPress,
+            handleAddToCart,
+            isInCart,
+            colors,
+            handleToggleFavorite,
+            isInWishlist,
+        ]
+    );
 
-    const renderListItem = useCallback(({ item }: { item: WishlistItem }) => (
-        <ProductListItem
-            item={convertToProduct(item)}
-            onPress={handleProductPress}
-            onAddToCart={handleAddToCart}
-            isInCart={isInCart(item.id)}
-            colors={colors}
-            onToggleFavorite={handleToggleFavorite}
-            isFavorite={isInWishlist(item.id)}
-        />
-    ), [handleProductPress, handleAddToCart, isInCart, colors, handleToggleFavorite, isInWishlist, convertToProduct]);
+    const keyExtractor = useCallback(
+        (item: WishlistItem) => item.id.toString(),
+        []
+    );
 
-    const listContentStyle = useMemo(() => ({
-        ...styles.listContainer,
-        paddingBottom: 100 + insets.bottom
-    }), [insets.bottom]);
-
+    // ============================================================================
+    // RENDER
+    // ============================================================================
     return (
         <MainContainer
             statusBarColor={colors.themePrimary}
@@ -118,55 +265,31 @@ const WishlistScreen: React.FC<WishlistScreenNavigationProps> = ({ navigation })
             isInternetRequired={false}
             showLoader={false}
         >
-            <View style={[styles.container, { backgroundColor: colors.backgroundPrimary }]}>
+            <View
+                style={[styles.container, { backgroundColor: colors.backgroundPrimary }]}
+            >
                 {/* Header */}
-                <View style={[styles.header, { backgroundColor: colors.themePrimary }]}>
-                    <View style={styles.headerTop}>
-                        <AppTouchableRipple
-                            style={styles.backButton}
-                            onPress={() => navigation.goBack()}
-                        >
-                            <Icon name="arrow-left" size={24} color={colors.white} />
-                        </AppTouchableRipple>
-
-                        <View style={styles.headerCenter}>
-                            <Text style={[styles.headerTitle, { color: colors.white }]}>
-                                My Wishlist
-                            </Text>
-                            <Text style={[styles.headerSubtitle, { color: colors.white }]}>
-                                {wishlistItems.length} {wishlistItems.length === 1 ? 'item' : 'items'}
-                            </Text>
-                        </View>
-
-                        <AppTouchableRipple
-                            style={styles.viewToggle}
-                            onPress={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-                        >
-                            <Icon
-                                name={viewMode === 'grid' ? 'view-list' : 'view-grid'}
-                                size={24}
-                                color={colors.white}
-                            />
-                        </AppTouchableRipple>
-                    </View>
-                </View>
+                <WishlistHeader
+                    itemCount={wishlistItems.length}
+                    viewMode={viewMode}
+                    onBack={handleGoBack}
+                    onToggleView={handleToggleView}
+                />
 
                 {/* Wishlist List/Grid */}
-                {wishlistItems.length === 0 ? (
-                    <EmptyData
-                        type={EmptyDataType.NO_RECORDS}
-                        title="Your Wishlist is Empty"
-                        description="Start adding products to your wishlist to save them for later"
-                    />
+                {!hasItems ? (
+                    <EmptyWishlist />
                 ) : (
                     <FlatList
                         data={wishlistItems}
                         renderItem={viewMode === 'grid' ? renderGridItem : renderListItem}
-                        keyExtractor={(item) => item.id.toString()}
-                        numColumns={viewMode === 'grid' ? 3 : 1}
+                        keyExtractor={keyExtractor}
+                        numColumns={viewMode === 'grid' ? GRID_COLUMNS : 1}
                         key={viewMode}
                         contentContainerStyle={listContentStyle}
-                        columnWrapperStyle={viewMode === 'grid' ? styles.gridRow : undefined}
+                        columnWrapperStyle={
+                            viewMode === 'grid' ? styles.gridRow : undefined
+                        }
                         showsVerticalScrollIndicator={false}
                         refreshControl={
                             <RefreshControl
@@ -183,8 +306,11 @@ const WishlistScreen: React.FC<WishlistScreenNavigationProps> = ({ navigation })
     );
 };
 
-export default WishlistScreen;
+export default memo(WishlistScreen);
 
+// ============================================================================
+// STYLES
+// ============================================================================
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -205,7 +331,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingBottom: 10
+        paddingBottom: 10,
     },
     backButton: {
         padding: 4,
@@ -235,4 +361,3 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
     },
 });
-

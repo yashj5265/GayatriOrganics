@@ -8,24 +8,49 @@ import {
     Dimensions,
     Animated,
     TouchableOpacity,
-    Alert
+    Alert,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+
 import MainContainer from '../../container/MainContainer';
 import { useTheme } from '../../contexts/ThemeProvider';
-import fonts from '../../styles/fonts';
+import { useCart } from '../../contexts/CardContext';
+import { useWishlist } from '../../contexts/WishlistContext';
 import AppTouchableRipple from '../../components/AppTouchableRipple';
 import ApiManager from '../../managers/ApiManager';
 import StorageManager from '../../managers/StorageManager';
+import fonts from '../../styles/fonts';
 import constant from '../../utilities/constant';
-import { useCart } from '../../contexts/CardContext';
-import { useWishlist } from '../../contexts/WishlistContext';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppColors } from '../../styles/colors';
 import { Category } from './ProductListScreen';
 
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+const { width, height } = Dimensions.get('window');
+const IMAGE_HEIGHT = height * 0.45;
+const BASE_IMAGE_URL = 'https://gayatriorganicfarm.com/storage/';
+const DEFAULT_RATING = 4.8;
+
+const STOCK_STATUS_CONFIG = {
+    OUT_OF_STOCK: { label: 'Out of Stock', color: '#FF5252', bgColor: '#FFEBEE', icon: 'close-circle' },
+    LOW_STOCK: { label: 'Low Stock', color: '#FF9800', bgColor: '#FFF3E0', icon: 'alert-circle' },
+    IN_STOCK: { label: 'In Stock', color: '#4CAF50', bgColor: '#E8F5E9', icon: 'check-circle' },
+} as const;
+
+const PRODUCT_FEATURES = [
+    { icon: 'leaf', title: '100% Organic', description: 'Certified organic product' },
+    { icon: 'truck-fast', title: 'Fast Delivery', description: 'Same day delivery available' },
+    { icon: 'shield-check', title: 'Quality Assured', description: 'Freshness guaranteed' },
+    { icon: 'cash-refund', title: 'Easy Returns', description: '7-day return policy' },
+] as const;
+
+// ============================================================================
+// TYPES
+// ============================================================================
 export interface ProductDetailScreenProps {
     productId: number;
 }
@@ -52,31 +77,519 @@ export interface Product {
     category: Category;
 }
 
-const { width, height } = Dimensions.get('window');
-const IMAGE_HEIGHT = height * 0.45;
+interface StockStatus {
+    label: string;
+    color: string;
+    bgColor: string;
+    icon: string;
+}
 
-const getStockStatus = (stock: number) => {
-    if (stock === 0) return { label: 'Out of Stock', color: '#FF5252', bgColor: '#FFEBEE', icon: 'close-circle' };
-    if (stock <= 5) return { label: 'Low Stock', color: '#FF9800', bgColor: '#FFF3E0', icon: 'alert-circle' };
-    return { label: 'In Stock', color: '#4CAF50', bgColor: '#E8F5E9', icon: 'check-circle' };
+interface ImageCarouselProps {
+    images: string[];
+    onBack: () => void;
+    isFavorite: boolean;
+    onToggleFavorite: () => void;
+}
+
+interface ProductHeaderProps {
+    product: Product;
+    stockStatus: StockStatus;
+    onCategoryPress: () => void;
+}
+
+interface PriceSectionProps {
+    price: string;
+    quantity: number;
+    maxStock: number;
+    onQuantityChange: (change: number) => void;
+}
+
+interface BottomActionBarProps {
+    totalPrice: number;
+    inCart: boolean;
+    isOutOfStock: boolean;
+    onAddToCart: () => void;
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+const getStockStatus = (stock: number): StockStatus => {
+    if (stock === 0) return STOCK_STATUS_CONFIG.OUT_OF_STOCK;
+    if (stock <= 5) return STOCK_STATUS_CONFIG.LOW_STOCK;
+    return STOCK_STATUS_CONFIG.IN_STOCK;
 };
 
-const getImageUrl = (imagePath: string) => `https://gayatriorganicfarm.com/storage/${imagePath}`;
+const getImageUrl = (imagePath: string): string => {
+    return `${BASE_IMAGE_URL}${imagePath}`;
+};
 
-const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ navigation, route }) => {
+const formatPrice = (price: string | number): string => {
+    return `₹${parseFloat(price.toString()).toFixed(2)}`;
+};
+
+const extractProductImages = (product: Product): string[] => {
+    return [product.image1, product.image2, product.image3, product.image4, product.image5]
+        .filter((img): img is string => img !== null);
+};
+
+const extractProductData = (response: any): Product | null => {
+    if (response?.status && response?.data) return response.data;
+    if (response?.data) return response.data;
+    return null;
+};
+
+// ============================================================================
+// SUB COMPONENTS
+// ============================================================================
+const ImageCard = memo(({ imageUrl, colors }: { imageUrl: string; colors: AppColors }) => {
+    const [imageError, setImageError] = useState(false);
+
+    return (
+        <View style={styles.imageCard}>
+            {!imageError ? (
+                <Image
+                    source={{ uri: imageUrl }}
+                    style={styles.productImage}
+                    resizeMode="cover"
+                    onError={() => setImageError(true)}
+                />
+            ) : (
+                <View style={[styles.imagePlaceholder, { backgroundColor: colors.themePrimaryLight }]}>
+                    <Icon name="image-off" size={64} color={colors.themePrimary} />
+                </View>
+            )}
+        </View>
+    );
+});
+
+const ImageIndicators = memo(({ images, scrollX }: { images: string[]; scrollX: Animated.Value }) => {
+    const colors = useTheme();
+
+    if (images.length <= 1) return null;
+
+    return (
+        <View style={styles.imageIndicators}>
+            {images.map((_, index) => {
+                const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
+                const dotWidth = scrollX.interpolate({
+                    inputRange,
+                    outputRange: [8, 20, 8],
+                    extrapolate: 'clamp',
+                });
+                const opacity = scrollX.interpolate({
+                    inputRange,
+                    outputRange: [0.3, 1, 0.3],
+                    extrapolate: 'clamp',
+                });
+
+                return (
+                    <Animated.View
+                        key={index}
+                        style={[
+                            styles.indicator,
+                            {
+                                width: dotWidth,
+                                opacity,
+                                backgroundColor: colors.white,
+                            },
+                        ]}
+                    />
+                );
+            })}
+        </View>
+    );
+});
+
+const FloatingButtons = memo(({
+    onBack,
+    isFavorite,
+    onToggleFavorite,
+}: {
+    onBack: () => void;
+    isFavorite: boolean;
+    onToggleFavorite: () => void;
+}) => {
+    return (
+        <View style={styles.floatingButtons}>
+            <AppTouchableRipple
+                style={[styles.floatingButton, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
+                onPress={onBack}
+            >
+                <Icon name="arrow-left" size={24} color="#FFFFFF" />
+            </AppTouchableRipple>
+
+            <AppTouchableRipple
+                style={[styles.floatingButton, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
+                onPress={onToggleFavorite}
+            >
+                <Icon
+                    name={isFavorite ? 'heart' : 'heart-outline'}
+                    size={24}
+                    color={isFavorite ? '#FF5252' : '#FFFFFF'}
+                />
+            </AppTouchableRipple>
+        </View>
+    );
+});
+
+const ImageCarousel = memo(({ images, onBack, isFavorite, onToggleFavorite }: ImageCarouselProps) => {
+    const colors = useTheme();
+    const scrollX = useRef(new Animated.Value(0)).current;
+
+    return (
+        <View style={styles.imageCarouselContainer}>
+            <ScrollView
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
+                    useNativeDriver: false,
+                })}
+                scrollEventThrottle={16}
+            >
+                {images.map((image, index) => (
+                    <ImageCard key={index} imageUrl={getImageUrl(image)} colors={colors} />
+                ))}
+            </ScrollView>
+
+            <ImageIndicators images={images} scrollX={scrollX} />
+            <FloatingButtons onBack={onBack} isFavorite={isFavorite} onToggleFavorite={onToggleFavorite} />
+        </View>
+    );
+});
+
+const CategoryBadge = memo(({ categoryName, onPress }: { categoryName: string; onPress: () => void }) => {
+    const colors = useTheme();
+
+    return (
+        <TouchableOpacity
+            style={[styles.categoryBadge, { backgroundColor: colors.themePrimaryLight }]}
+            onPress={onPress}
+        >
+            <Icon name="tag" size={14} color={colors.themePrimary} />
+            <Text style={[styles.categoryBadgeText, { color: colors.themePrimary }]}>
+                {categoryName}
+            </Text>
+            <Icon name="chevron-right" size={14} color={colors.themePrimary} />
+        </TouchableOpacity>
+    );
+});
+
+const StockStatusBadge = memo(({ stockStatus, stock }: { stockStatus: StockStatus; stock: number }) => {
+    return (
+        <View style={[styles.stockStatusBadge, { backgroundColor: stockStatus.bgColor }]}>
+            <Icon name={stockStatus.icon} size={16} color={stockStatus.color} />
+            <Text style={[styles.stockStatusText, { color: stockStatus.color }]}>
+                {stockStatus.label} • {stock} units available
+            </Text>
+        </View>
+    );
+});
+
+const ProductHeader = memo(({ product, stockStatus, onCategoryPress }: ProductHeaderProps) => {
+    const colors = useTheme();
+
+    return (
+        <>
+            <CategoryBadge categoryName={product.category.name} onPress={onCategoryPress} />
+            <Text style={[styles.productName, { color: colors.textPrimary }]}>
+                {product.name}
+            </Text>
+            <StockStatusBadge stockStatus={stockStatus} stock={product.stock} />
+        </>
+    );
+});
+
+const QuantitySelector = memo(({
+    quantity,
+    maxStock,
+    onQuantityChange,
+}: {
+    quantity: number;
+    maxStock: number;
+    onQuantityChange: (change: number) => void;
+}) => {
+    const colors = useTheme();
+
+    return (
+        <View style={[styles.quantitySelector, { backgroundColor: colors.backgroundSecondary }]}>
+            <Text style={[styles.quantityLabel, { color: colors.textLabel }]}>Quantity</Text>
+            <View style={styles.quantityControls}>
+                <AppTouchableRipple
+                    style={[styles.quantityButton, { backgroundColor: colors.themePrimaryLight }]}
+                    onPress={() => onQuantityChange(-1)}
+                    disabled={quantity <= 1}
+                >
+                    <Icon name="minus" size={20} color={colors.themePrimary} />
+                </AppTouchableRipple>
+
+                <Text style={[styles.quantityValue, { color: colors.textPrimary }]}>
+                    {quantity}
+                </Text>
+
+                <AppTouchableRipple
+                    style={[styles.quantityButton, { backgroundColor: colors.themePrimaryLight }]}
+                    onPress={() => onQuantityChange(1)}
+                    disabled={quantity >= maxStock}
+                >
+                    <Icon name="plus" size={20} color={colors.themePrimary} />
+                </AppTouchableRipple>
+            </View>
+        </View>
+    );
+});
+
+const PriceSection = memo(({ price, quantity, maxStock, onQuantityChange }: PriceSectionProps) => {
+    const colors = useTheme();
+
+    return (
+        <View style={styles.priceSection}>
+            <View>
+                <Text style={[styles.priceLabel, { color: colors.textLabel }]}>Price</Text>
+                <Text style={[styles.price, { color: colors.themePrimary }]}>
+                    {formatPrice(price)}
+                </Text>
+                <Text style={[styles.priceSubtext, { color: colors.textDescription }]}>
+                    Per piece
+                </Text>
+            </View>
+
+            <QuantitySelector
+                quantity={quantity}
+                maxStock={maxStock}
+                onQuantityChange={onQuantityChange}
+            />
+        </View>
+    );
+});
+
+const TotalPriceCard = memo(({ totalPrice }: { totalPrice: number }) => {
+    const colors = useTheme();
+
+    return (
+        <View style={[styles.totalPriceCard, { backgroundColor: colors.themePrimaryLight }]}>
+            <View>
+                <Text style={[styles.totalLabel, { color: colors.themePrimary }]}>
+                    Total Amount
+                </Text>
+                <Text style={[styles.totalPrice, { color: colors.themePrimary }]}>
+                    ₹{totalPrice.toFixed(2)}
+                </Text>
+            </View>
+            <View style={{ opacity: 0.3 }}>
+                <Icon name="calculator" size={32} color={colors.themePrimary} />
+            </View>
+        </View>
+    );
+});
+
+const ProductDescription = memo(({ description }: { description: string }) => {
+    const colors = useTheme();
+
+    return (
+        <View style={styles.descriptionSection}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                Product Description
+            </Text>
+            <Text style={[styles.description, { color: colors.textDescription }]}>
+                {description}
+            </Text>
+        </View>
+    );
+});
+
+const FeatureItem = memo(({
+    icon,
+    title,
+    description,
+}: {
+    icon: string;
+    title: string;
+    description: string;
+}) => {
+    const colors = useTheme();
+
+    return (
+        <View style={[styles.featureItem, { backgroundColor: colors.backgroundSecondary }]}>
+            <View style={[styles.featureIcon, { backgroundColor: colors.themePrimaryLight }]}>
+                <Icon name={icon} size={20} color={colors.themePrimary} />
+            </View>
+            <View style={styles.featureContent}>
+                <Text style={[styles.featureTitle, { color: colors.textPrimary }]}>
+                    {title}
+                </Text>
+                <Text style={[styles.featureDescription, { color: colors.textDescription }]}>
+                    {description}
+                </Text>
+            </View>
+        </View>
+    );
+});
+
+const ProductFeatures = memo(() => {
+    const colors = useTheme();
+
+    return (
+        <View style={styles.featuresSection}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                Product Features
+            </Text>
+            <View style={styles.featuresList}>
+                {PRODUCT_FEATURES.map((feature, index) => (
+                    <FeatureItem
+                        key={index}
+                        icon={feature.icon}
+                        title={feature.title}
+                        description={feature.description}
+                    />
+                ))}
+            </View>
+        </View>
+    );
+});
+
+const InfoCard = memo(({
+    icon,
+    iconColor,
+    label,
+    value,
+}: {
+    icon: string;
+    iconColor?: string;
+    label: string;
+    value: string | number;
+}) => {
+    const colors = useTheme();
+
+    return (
+        <View style={[styles.infoCard, { backgroundColor: colors.backgroundSecondary }]}>
+            <Icon name={icon} size={24} color={iconColor || colors.themePrimary} />
+            <Text style={[styles.infoLabel, { color: colors.textLabel }]}>
+                {label}
+            </Text>
+            <Text style={[styles.infoValue, { color: colors.textPrimary }]} numberOfLines={1}>
+                {value}
+            </Text>
+        </View>
+    );
+});
+
+const ProductInfoGrid = memo(({ product }: { product: Product }) => {
+    return (
+        <View style={styles.infoGrid}>
+            <InfoCard icon="package-variant" label="Stock" value={product.stock} />
+            <InfoCard icon="tag-multiple" label="Category" value={product.category.name} />
+            <InfoCard icon="star" iconColor="#FFC107" label="Rating" value={`${DEFAULT_RATING}★`} />
+        </View>
+    );
+});
+
+const BottomActionBar = memo(({ totalPrice, inCart, isOutOfStock, onAddToCart }: BottomActionBarProps) => {
     const colors = useTheme();
     const insets = useSafeAreaInsets();
 
+    return (
+        <View
+            style={[
+                styles.bottomBar,
+                {
+                    backgroundColor: colors.backgroundPrimary,
+                    marginBottom: insets.bottom,
+                },
+            ]}
+        >
+            <View style={styles.bottomBarContent}>
+                <View>
+                    <Text style={[styles.bottomBarLabel, { color: colors.textLabel }]}>
+                        Total Price
+                    </Text>
+                    <Text style={[styles.bottomBarPrice, { color: colors.themePrimary }]}>
+                        ₹{totalPrice.toFixed(2)}
+                    </Text>
+                </View>
+
+                <AppTouchableRipple
+                    style={[
+                        styles.addToCartButton,
+                        {
+                            backgroundColor: isOutOfStock
+                                ? colors.textLabel
+                                : colors.themePrimary,
+                        },
+                    ]}
+                    onPress={onAddToCart}
+                    disabled={isOutOfStock}
+                >
+                    <Icon
+                        name={inCart ? 'check-circle' : 'cart-plus'}
+                        size={22}
+                        color={colors.white}
+                    />
+                    <Text style={[styles.addToCartText, { color: colors.white }]}>
+                        {isOutOfStock ? 'Out of Stock' : inCart ? 'Update Cart' : 'Add to Cart'}
+                    </Text>
+                </AppTouchableRipple>
+            </View>
+        </View>
+    );
+});
+
+const LoadingState = memo(() => {
+    const colors = useTheme();
+
+    return (
+        <MainContainer
+            statusBarColor="transparent"
+            statusBarStyle="light-content"
+            isInternetRequired={true}
+            showLoader={true}
+        >
+            <View style={[styles.container, { backgroundColor: colors.backgroundPrimary }]} />
+        </MainContainer>
+    );
+});
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
+const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ navigation, route }) => {
+    const colors = useTheme();
+    const insets = useSafeAreaInsets();
     const { productId } = route.params;
     const { addToCart, isInCart, updateQuantity, getCartItem } = useCart();
     const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
 
+    // ============================================================================
+    // STATE
+    // ============================================================================
     const [product, setProduct] = useState<Product | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [quantity, setQuantity] = useState<number>(1);
-    const scrollX = useRef(new Animated.Value(0)).current;
-    const scrollViewRef = useRef<ScrollView>(null);
 
+    // ============================================================================
+    // COMPUTED VALUES
+    // ============================================================================
+    const productImages = useMemo(() => (product ? extractProductImages(product) : []), [product]);
+    const stockStatus = useMemo(() => (product ? getStockStatus(product.stock) : null), [product]);
+    const inCart = useMemo(() => (product ? isInCart(product.id) : false), [product, isInCart]);
+    const isFavorite = useMemo(() => (product ? isInWishlist(product.id) : false), [product, isInWishlist]);
+    const totalPrice = useMemo(() => {
+        if (!product) return 0;
+        return parseFloat(product.price) * quantity;
+    }, [product, quantity]);
+
+    const scrollContentStyle = useMemo(
+        () => ({
+            ...styles.scrollContent,
+            paddingBottom: 100 + insets.bottom,
+        }),
+        [insets.bottom]
+    );
+
+    // ============================================================================
+    // API HANDLERS
+    // ============================================================================
     const fetchProductDetail = useCallback(async () => {
         setLoading(true);
         try {
@@ -88,10 +601,10 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                 showError: true,
             });
 
-            if (response?.status && response?.data) {
-                setProduct(response.data);
-            } else if (response?.data) {
-                setProduct(response.data);
+            const productData = extractProductData(response);
+
+            if (productData) {
+                setProduct(productData);
             } else {
                 Alert.alert('Error', 'Product not found');
                 navigation.goBack();
@@ -105,6 +618,9 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
         }
     }, [productId, navigation]);
 
+    // ============================================================================
+    // EFFECTS
+    // ============================================================================
     useEffect(() => {
         fetchProductDetail();
     }, [fetchProductDetail]);
@@ -118,22 +634,24 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
         }
     }, [product, isInCart, getCartItem]);
 
+    // ============================================================================
+    // HANDLERS
+    // ============================================================================
     const handleAddToCart = useCallback(() => {
         if (!product || product.stock === 0) return;
 
         if (isInCart(product.id)) {
             updateQuantity(product.id, quantity);
-            Alert.alert(
-                'Cart Updated',
-                `Updated ${product.name} quantity to ${quantity}`,
-                [
-                    { text: 'Continue Shopping', style: 'cancel' },
-                    {
-                        text: 'View Cart',
-                        onPress: () => navigation.navigate(constant.routeName.mainTabs, { screen: constant.routeName.cart })
-                    }
-                ]
-            );
+            Alert.alert('Cart Updated', `Updated ${product.name} quantity to ${quantity}`, [
+                { text: 'Continue Shopping', style: 'cancel' },
+                {
+                    text: 'View Cart',
+                    onPress: () =>
+                        navigation.navigate(constant.routeName.mainTabs, {
+                            screen: constant.routeName.cart,
+                        }),
+                },
+            ]);
         } else {
             addToCart({
                 id: product.id,
@@ -145,38 +663,29 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                 categoryId: product.category_id || product.category?.id,
                 productId: product.id,
             });
-            Alert.alert(
-                'Added to Cart',
-                `${product.name} (${quantity}) has been added to your cart`,
-                [
-                    { text: 'Continue Shopping', style: 'cancel' },
-                    { text: 'View Cart', onPress: () => navigation.navigate(constant.routeName.mainTabs, { screen: constant.routeName.cart }) }
-                ]
-            );
+            Alert.alert('Added to Cart', `${product.name} (${quantity}) has been added to your cart`, [
+                { text: 'Continue Shopping', style: 'cancel' },
+                {
+                    text: 'View Cart',
+                    onPress: () =>
+                        navigation.navigate(constant.routeName.mainTabs, {
+                            screen: constant.routeName.cart,
+                        }),
+                },
+            ]);
         }
     }, [product, quantity, isInCart, updateQuantity, addToCart, navigation]);
 
-    const handleQuantityChange = useCallback((change: number) => {
-        if (!product) return;
-        const newQuantity = quantity + change;
-        if (newQuantity >= 1 && newQuantity <= product.stock) {
-            setQuantity(newQuantity);
-        }
-    }, [product, quantity]);
-
-    const productImages = useMemo(() => {
-        if (!product) return [];
-        return [product.image1, product.image2, product.image3, product.image4, product.image5]
-            .filter((img): img is string => img !== null);
-    }, [product]);
-
-    const stockStatus = useMemo(() => product ? getStockStatus(product.stock) : null, [product]);
-    const inCart = useMemo(() => product ? isInCart(product.id) : false, [product, isInCart]);
-    const isFavorite = useMemo(() => product ? isInWishlist(product.id) : false, [product, isInWishlist]);
-    const totalPrice = useMemo(() => {
-        if (!product) return 0;
-        return parseFloat(product.price) * quantity;
-    }, [product, quantity]);
+    const handleQuantityChange = useCallback(
+        (change: number) => {
+            if (!product) return;
+            const newQuantity = quantity + change;
+            if (newQuantity >= 1 && newQuantity <= product.stock) {
+                setQuantity(newQuantity);
+            }
+        },
+        [product, quantity]
+    );
 
     const handleToggleFavorite = useCallback(() => {
         if (!product) return;
@@ -196,24 +705,33 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
         }
     }, [product, isInWishlist, addToWishlist, removeFromWishlist]);
 
-    const scrollContentStyle = useMemo(() => ({
-        ...styles.scrollContent,
-        paddingBottom: 100 + insets.bottom
-    }), [insets.bottom]);
+    const handleCategoryPress = useCallback(() => {
+        if (!product?.category_id) {
+            console.error('❌ Product category_id is missing');
+            return;
+        }
+        navigation.navigate(constant.routeName.categoryDetail, {
+            params: {
+                categoryId: product.category_id,
+                categoryName: product.category.name,
+            },
+        });
+    }, [product, navigation]);
 
+    const handleGoBack = useCallback(() => {
+        navigation.goBack();
+    }, [navigation]);
+
+    // ============================================================================
+    // RENDER - LOADING STATE
+    // ============================================================================
     if (loading || !product || !stockStatus) {
-        return (
-            <MainContainer
-                statusBarColor="transparent"
-                statusBarStyle="light-content"
-                isInternetRequired={true}
-                showLoader={true}
-            >
-                <View style={[styles.container, { backgroundColor: colors.backgroundPrimary }]} />
-            </MainContainer>
-        );
+        return <LoadingState />;
     }
 
+    // ============================================================================
+    // RENDER - PRODUCT DETAILS
+    // ============================================================================
     return (
         <MainContainer
             statusBarColor="transparent"
@@ -222,358 +740,66 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
         >
             <View style={[styles.container, { backgroundColor: colors.backgroundPrimary }]}>
                 <ScrollView
-                    ref={scrollViewRef}
                     style={styles.scrollView}
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={scrollContentStyle}
                 >
-                    <View style={styles.imageCarouselContainer}>
-                        <ScrollView
-                            horizontal
-                            pagingEnabled
-                            showsHorizontalScrollIndicator={false}
-                            onScroll={Animated.event(
-                                [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-                                { useNativeDriver: false }
-                            )}
-                            scrollEventThrottle={16}
-                        >
-                            {productImages.map((image, index) => (
-                                <ImageCard key={index} imageUrl={getImageUrl(image)} colors={colors} />
-                            ))}
-                        </ScrollView>
-
-                        {productImages.length > 1 && (
-                            <View style={styles.imageIndicators}>
-                                {productImages.map((_, index) => {
-                                    const inputRange = [
-                                        (index - 1) * width,
-                                        index * width,
-                                        (index + 1) * width
-                                    ];
-                                    const dotWidth = scrollX.interpolate({
-                                        inputRange,
-                                        outputRange: [8, 20, 8],
-                                        extrapolate: 'clamp'
-                                    });
-                                    const opacity = scrollX.interpolate({
-                                        inputRange,
-                                        outputRange: [0.3, 1, 0.3],
-                                        extrapolate: 'clamp'
-                                    });
-
-                                    return (
-                                        <Animated.View
-                                            key={index}
-                                            style={[
-                                                styles.indicator,
-                                                {
-                                                    width: dotWidth,
-                                                    opacity,
-                                                    backgroundColor: colors.white
-                                                }
-                                            ]}
-                                        />
-                                    );
-                                })}
-                            </View>
-                        )}
-
-                        {/* Floating Buttons */}
-                        <View style={styles.floatingButtons}>
-                            <AppTouchableRipple
-                                style={{ ...styles.floatingButton, backgroundColor: 'rgba(0,0,0,0.5)' }}
-                                onPress={() => navigation.goBack()}
-                            >
-                                <Icon name="arrow-left" size={24} color="#FFFFFF" />
-                            </AppTouchableRipple>
-
-                            <AppTouchableRipple
-                                style={{ ...styles.floatingButton, backgroundColor: 'rgba(0,0,0,0.5)' }}
-                                onPress={handleToggleFavorite}
-                            >
-                                <Icon
-                                    name={isFavorite ? "heart" : "heart-outline"}
-                                    size={24}
-                                    color={isFavorite ? "#FF5252" : "#FFFFFF"}
-                                />
-                            </AppTouchableRipple>
-                        </View>
-                    </View>
+                    {/* Image Carousel */}
+                    <ImageCarousel
+                        images={productImages}
+                        onBack={handleGoBack}
+                        isFavorite={isFavorite}
+                        onToggleFavorite={handleToggleFavorite}
+                    />
 
                     {/* Product Info Card */}
                     <View style={[styles.productInfoCard, { backgroundColor: colors.backgroundPrimary }]}>
-                        {/* Category Badge */}
-                        <TouchableOpacity
-                            style={[styles.categoryBadge, { backgroundColor: colors.themePrimaryLight }]}
-                            onPress={() => {
-                                if (!product.category_id) {
-                                    console.error('❌ Product category_id is missing');
-                                    return;
-                                }
-                                navigation.navigate(constant.routeName.categoryDetail, {
-                                    params: {
-                                        categoryId: product.category_id,
-                                        categoryName: product.category.name
-                                    }
-                                });
-                            }}
-                        >
-                            <Icon name="tag" size={14} color={colors.themePrimary} />
-                            <Text style={[styles.categoryBadgeText, { color: colors.themePrimary }]}>
-                                {product.category.name}
-                            </Text>
-                            <Icon name="chevron-right" size={14} color={colors.themePrimary} />
-                        </TouchableOpacity>
-
-                        {/* Product Name */}
-                        <Text style={[styles.productName, { color: colors.textPrimary }]}>
-                            {product.name}
-                        </Text>
-
-                        {/* Stock Status */}
-                        <View style={[styles.stockStatusBadge, { backgroundColor: stockStatus.bgColor }]}>
-                            <Icon name={stockStatus.icon} size={16} color={stockStatus.color} />
-                            <Text style={[styles.stockStatusText, { color: stockStatus.color }]}>
-                                {stockStatus.label} • {product.stock} units available
-                            </Text>
-                        </View>
+                        {/* Header */}
+                        <ProductHeader
+                            product={product}
+                            stockStatus={stockStatus}
+                            onCategoryPress={handleCategoryPress}
+                        />
 
                         {/* Price Section */}
-                        <View style={styles.priceSection}>
-                            <View>
-                                <Text style={[styles.priceLabel, { color: colors.textLabel }]}>Price</Text>
-                                <Text style={[styles.price, { color: colors.themePrimary }]}>
-                                    ₹{parseFloat(product.price).toFixed(2)}
-                                </Text>
-                                <Text style={[styles.priceSubtext, { color: colors.textDescription }]}>
-                                    Per piece
-                                </Text>
-                            </View>
-
-                            {/* Quantity Selector */}
-                            <View style={[styles.quantitySelector, { backgroundColor: colors.backgroundSecondary }]}>
-                                <Text style={[styles.quantityLabel, { color: colors.textLabel }]}>Quantity</Text>
-                                <View style={styles.quantityControls}>
-                                    <AppTouchableRipple
-                                        style={{
-                                            ...styles.quantityButton,
-                                            backgroundColor: colors.themePrimaryLight
-                                        }}
-                                        onPress={() => handleQuantityChange(-1)}
-                                        disabled={quantity <= 1}
-                                    >
-                                        <Icon name="minus" size={20} color={colors.themePrimary} />
-                                    </AppTouchableRipple>
-
-                                    <Text style={[styles.quantityValue, { color: colors.textPrimary }]}>
-                                        {quantity}
-                                    </Text>
-
-                                    <AppTouchableRipple
-                                        style={{
-                                            ...styles.quantityButton,
-                                            backgroundColor: colors.themePrimaryLight
-                                        }}
-                                        onPress={() => handleQuantityChange(1)}
-                                        disabled={quantity >= product.stock}
-                                    >
-                                        <Icon name="plus" size={20} color={colors.themePrimary} />
-                                    </AppTouchableRipple>
-                                </View>
-                            </View>
-                        </View>
+                        <PriceSection
+                            price={product.price}
+                            quantity={quantity}
+                            maxStock={product.stock}
+                            onQuantityChange={handleQuantityChange}
+                        />
 
                         {/* Total Price */}
-                        <View style={[styles.totalPriceCard, { backgroundColor: colors.themePrimaryLight }]}>
-                            <View>
-                                <Text style={[styles.totalLabel, { color: colors.themePrimary }]}>
-                                    Total Amount
-                                </Text>
-                                <Text style={[styles.totalPrice, { color: colors.themePrimary }]}>
-                                    ₹{totalPrice.toFixed(2)}
-                                </Text>
-                            </View>
-                            <View style={{ opacity: 0.3 }}>
-                                <Icon name="calculator" size={32} color={colors.themePrimary} />
-                            </View>
-                        </View>
+                        <TotalPriceCard totalPrice={totalPrice} />
 
                         {/* Description */}
-                        <View style={styles.descriptionSection}>
-                            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-                                Product Description
-                            </Text>
-                            <Text style={[styles.description, { color: colors.textDescription }]}>
-                                {product.description}
-                            </Text>
-                        </View>
+                        <ProductDescription description={product.description} />
 
                         {/* Features */}
-                        <View style={styles.featuresSection}>
-                            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-                                Product Features
-                            </Text>
-                            <View style={styles.featuresList}>
-                                <FeatureItem
-                                    icon="leaf"
-                                    title="100% Organic"
-                                    description="Certified organic product"
-                                    colors={colors}
-                                />
-                                <FeatureItem
-                                    icon="truck-fast"
-                                    title="Fast Delivery"
-                                    description="Same day delivery available"
-                                    colors={colors}
-                                />
-                                <FeatureItem
-                                    icon="shield-check"
-                                    title="Quality Assured"
-                                    description="Freshness guaranteed"
-                                    colors={colors}
-                                />
-                                <FeatureItem
-                                    icon="cash-refund"
-                                    title="Easy Returns"
-                                    description="7-day return policy"
-                                    colors={colors}
-                                />
-                            </View>
-                        </View>
+                        <ProductFeatures />
 
-                        {/* Product Info Grid */}
-                        <View style={styles.infoGrid}>
-                            <View style={[styles.infoCard, { backgroundColor: colors.backgroundSecondary }]}>
-                                <Icon name="package-variant" size={24} color={colors.themePrimary} />
-                                <Text style={[styles.infoLabel, { color: colors.textLabel }]}>Stock</Text>
-                                <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
-                                    {product.stock}
-                                </Text>
-                            </View>
-
-                            <View style={[styles.infoCard, { backgroundColor: colors.backgroundSecondary }]}>
-                                <Icon name="tag-multiple" size={24} color={colors.themePrimary} />
-                                <Text style={[styles.infoLabel, { color: colors.textLabel }]}>Category</Text>
-                                <Text style={[styles.infoValue, { color: colors.textPrimary }]} numberOfLines={1}>
-                                    {product.category.name}
-                                </Text>
-                            </View>
-
-                            <View style={[styles.infoCard, { backgroundColor: colors.backgroundSecondary }]}>
-                                <Icon name="star" size={24} color="#FFC107" />
-                                <Text style={[styles.infoLabel, { color: colors.textLabel }]}>Rating</Text>
-                                <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
-                                    4.8★
-                                </Text>
-                            </View>
-                        </View>
+                        {/* Info Grid */}
+                        <ProductInfoGrid product={product} />
                     </View>
                 </ScrollView>
 
                 {/* Bottom Action Bar */}
-                <View style={[styles.bottomBar, { backgroundColor: colors.backgroundPrimary, marginBottom: insets.bottom }]}>
-                    <View style={styles.bottomBarContent}>
-                        <View>
-                            <Text style={[styles.bottomBarLabel, { color: colors.textLabel }]}>
-                                Total Price
-                            </Text>
-                            <Text style={[styles.bottomBarPrice, { color: colors.themePrimary }]}>
-                                ₹{totalPrice.toFixed(2)}
-                            </Text>
-                        </View>
-
-                        <AppTouchableRipple
-                            style={{
-                                ...styles.addToCartButton,
-                                backgroundColor: product.stock === 0
-                                    ? colors.textLabel
-                                    : inCart
-                                        ? colors.themePrimary
-                                        : colors.themePrimary
-                            }}
-                            onPress={handleAddToCart}
-                            disabled={product.stock === 0}
-                        >
-                            <Icon
-                                name={inCart ? "check-circle" : "cart-plus"}
-                                size={22}
-                                color={colors.white}
-                            />
-                            <Text style={[styles.addToCartText, { color: colors.white }]}>
-                                {product.stock === 0
-                                    ? 'Out of Stock'
-                                    : inCart
-                                        ? 'Update Cart'
-                                        : 'Add to Cart'}
-                            </Text>
-                        </AppTouchableRipple>
-                    </View>
-                </View>
+                <BottomActionBar
+                    totalPrice={totalPrice}
+                    inCart={inCart}
+                    isOutOfStock={product.stock === 0}
+                    onAddToCart={handleAddToCart}
+                />
             </View>
         </MainContainer>
     );
 };
 
-// Image Card Component
-interface ImageCardProps {
-    imageUrl: string;
-    colors: AppColors;
-}
+export default memo(ProductDetailScreen);
 
-const ImageCard: React.FC<ImageCardProps> = memo(({ imageUrl, colors }) => {
-    const [imageError, setImageError] = useState(false);
-
-    const handleImageError = useCallback(() => {
-        setImageError(true);
-    }, []);
-
-    return (
-        <View style={styles.imageCard}>
-            {!imageError ? (
-                <Image
-                    source={{ uri: imageUrl }}
-                    style={styles.productImage}
-                    resizeMode="cover"
-                    onError={handleImageError}
-                />
-            ) : (
-                <View style={[styles.imagePlaceholder, { backgroundColor: colors.themePrimaryLight }]}>
-                    <Icon name="image-off" size={64} color={colors.themePrimary} />
-                </View>
-            )}
-        </View>
-    );
-});
-
-// Feature Item Component
-interface FeatureItemProps {
-    icon: string;
-    title: string;
-    description: string;
-    colors: AppColors;
-}
-
-const FeatureItem: React.FC<FeatureItemProps> = memo(({ icon, title, description, colors }) => {
-    return (
-        <View style={[styles.featureItem, { backgroundColor: colors.backgroundSecondary }]}>
-            <View style={[styles.featureIcon, { backgroundColor: colors.themePrimaryLight }]}>
-                <Icon name={icon} size={20} color={colors.themePrimary} />
-            </View>
-            <View style={styles.featureContent}>
-                <Text style={[styles.featureTitle, { color: colors.textPrimary }]}>
-                    {title}
-                </Text>
-                <Text style={[styles.featureDescription, { color: colors.textDescription }]}>
-                    {description}
-                </Text>
-            </View>
-        </View>
-    );
-});
-
-export default ProductDetailScreen;
-
+// ============================================================================
+// STYLES
+// ============================================================================
 const styles = StyleSheet.create({
     container: {
         flex: 1,

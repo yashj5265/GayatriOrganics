@@ -1,48 +1,491 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+
 import MainContainer from '../../container/MainContainer';
 import { useTheme } from '../../contexts/ThemeProvider';
-import fonts from '../../styles/fonts';
-import AppTouchableRipple from '../../components/AppTouchableRipple';
 import { useCart } from '../../contexts/CardContext';
 import { useAddress, Address } from '../../contexts/AddressContext';
+import AppTouchableRipple from '../../components/AppTouchableRipple';
 import ApiManager from '../../managers/ApiManager';
 import StorageManager from '../../managers/StorageManager';
+import fonts from '../../styles/fonts';
 import constant from '../../utilities/constant';
 
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+const DELIVERY_CHARGE = 30;
+
+const ADDRESS_TYPES = {
+    HOME: 'Home',
+    WORK: 'Work',
+    OTHER: 'Other',
+} as const;
+
+const ADDRESS_ICONS = {
+    [ADDRESS_TYPES.HOME]: 'home',
+    [ADDRESS_TYPES.WORK]: 'briefcase',
+    [ADDRESS_TYPES.OTHER]: 'map-marker',
+} as const;
+
+const PAYMENT_METHODS = {
+    COD: {
+        id: 'cod',
+        name: 'Cash on Delivery',
+        description: 'Pay when you receive your order',
+        icon: 'cash-multiple',
+    },
+} as const;
+
+// ============================================================================
+// TYPES
+// ============================================================================
 interface CheckoutScreenProps {
     navigation: NativeStackNavigationProp<any>;
 }
 
-const DELIVERY_CHARGE = 30;
+interface AddressCardProps {
+    address: Address;
+    isSelected: boolean;
+    onSelect: (address: Address) => void;
+}
 
+interface OrderSummaryProps {
+    itemCount: number;
+    cartTotal: number;
+    deliveryCharge: number;
+    total: number;
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+const formatCurrency = (amount: number): string => {
+    return `₹${amount.toFixed(2)}`;
+};
+
+const formatAddress = (address: Address): string => {
+    return `${address.addressLine1}, ${address.city}, ${address.state} - ${address.pincode}`;
+};
+
+const getAddressTypeIcon = (type: string): string => {
+    return ADDRESS_ICONS[type as keyof typeof ADDRESS_ICONS] || ADDRESS_ICONS[ADDRESS_TYPES.OTHER];
+};
+
+const getDefaultAddress = (addresses: Address[]): Address | null => {
+    return addresses.find((addr) => addr.isDefault) || addresses[0] || null;
+};
+
+// ============================================================================
+// SUB COMPONENTS
+// ============================================================================
+const CheckoutHeader = memo(({ onBack }: { onBack: () => void }) => {
+    const colors = useTheme();
+
+    return (
+        <View style={[styles.header, { backgroundColor: colors.themePrimary }]}>
+            <AppTouchableRipple style={styles.backButton} onPress={onBack}>
+                <Icon name="arrow-left" size={24} color={colors.white} />
+            </AppTouchableRipple>
+            <Text style={[styles.headerTitle, { color: colors.white }]}>
+                Checkout
+            </Text>
+            <View style={styles.headerRight} />
+        </View>
+    );
+});
+
+const SectionHeader = memo(({ icon, title }: { icon: string; title: string }) => {
+    const colors = useTheme();
+
+    return (
+        <View style={styles.sectionHeader}>
+            <Icon name={icon} size={20} color={colors.themePrimary} />
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                {title}
+            </Text>
+        </View>
+    );
+});
+
+const EmptyAddressCard = memo(({ onAddAddress }: { onAddAddress: () => void }) => {
+    const colors = useTheme();
+
+    return (
+        <View style={[styles.emptyAddressCard, { backgroundColor: colors.backgroundSecondary }]}>
+            <Icon name="map-marker-off" size={32} color={colors.textLabel} />
+            <Text style={[styles.emptyAddressText, { color: colors.textDescription }]}>
+                No address found
+            </Text>
+            <AppTouchableRipple
+                style={[styles.addAddressButton, { backgroundColor: colors.themePrimary }]}
+                onPress={onAddAddress}
+            >
+                <Icon name="plus" size={18} color={colors.white} />
+                <Text style={[styles.addAddressButtonText, { color: colors.white }]}>
+                    Add Address
+                </Text>
+            </AppTouchableRipple>
+        </View>
+    );
+});
+
+const AddressCard = memo(({ address, isSelected, onSelect }: AddressCardProps) => {
+    const colors = useTheme();
+
+    return (
+        <AppTouchableRipple
+            style={[
+                styles.addressCard,
+                {
+                    backgroundColor: isSelected ? colors.themePrimaryLight : colors.backgroundSecondary,
+                    borderColor: isSelected ? colors.themePrimary : colors.border,
+                    borderWidth: isSelected ? 2 : 1,
+                },
+            ]}
+            onPress={() => onSelect(address)}
+        >
+            {/* Header with type and selection badge */}
+            <View style={styles.addressCardHeader}>
+                <View style={styles.addressTypeContainer}>
+                    <Icon
+                        name={getAddressTypeIcon(address.addressType)}
+                        size={16}
+                        color={isSelected ? colors.themePrimary : colors.textLabel}
+                    />
+                    <Text
+                        style={[
+                            styles.addressType,
+                            { color: isSelected ? colors.themePrimary : colors.textLabel },
+                        ]}
+                    >
+                        {address.addressType}
+                    </Text>
+                    {address.isDefault && (
+                        <View style={[styles.defaultBadge, { backgroundColor: colors.themePrimary }]}>
+                            <Text style={[styles.defaultBadgeText, { color: colors.white }]}>
+                                Default
+                            </Text>
+                        </View>
+                    )}
+                </View>
+                {isSelected && (
+                    <View style={[styles.selectedBadge, { backgroundColor: colors.themePrimary }]}>
+                        <Icon name="check" size={14} color={colors.white} />
+                    </View>
+                )}
+            </View>
+
+            {/* Address text */}
+            <Text
+                style={[
+                    styles.addressText,
+                    { color: isSelected ? colors.textPrimary : colors.textDescription },
+                ]}
+                numberOfLines={3}
+            >
+                {formatAddress(address)}
+            </Text>
+
+            {/* Contact info */}
+            <Text
+                style={[
+                    styles.addressName,
+                    { color: isSelected ? colors.textPrimary : colors.textLabel },
+                ]}
+            >
+                {address.fullName} • {address.phone}
+            </Text>
+        </AppTouchableRipple>
+    );
+});
+
+const AddressSection = memo(({
+    addresses,
+    selectedAddressId,
+    onSelectAddress,
+    onAddAddress,
+    onManageAddresses,
+}: {
+    addresses: Address[];
+    selectedAddressId: number | null;
+    onSelectAddress: (address: Address) => void;
+    onAddAddress: () => void;
+    onManageAddresses: () => void;
+}) => {
+    const colors = useTheme();
+    const hasNoAddresses = addresses.length === 0;
+
+    return (
+        <View style={styles.section}>
+            <SectionHeader icon="map-marker" title="Delivery Address" />
+
+            {hasNoAddresses ? (
+                <EmptyAddressCard onAddAddress={onAddAddress} />
+            ) : (
+                <>
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.addressScrollContainer}
+                    >
+                        {addresses.map((address) => (
+                            <AddressCard
+                                key={address.id}
+                                address={address}
+                                isSelected={selectedAddressId === address.id}
+                                onSelect={onSelectAddress}
+                            />
+                        ))}
+                    </ScrollView>
+
+                    <AppTouchableRipple
+                        style={[styles.manageAddressButton, { backgroundColor: colors.backgroundSecondary }]}
+                        onPress={onManageAddresses}
+                    >
+                        <Icon name="pencil" size={18} color={colors.themePrimary} />
+                        <Text style={[styles.manageAddressText, { color: colors.themePrimary }]}>
+                            Manage Addresses
+                        </Text>
+                    </AppTouchableRipple>
+                </>
+            )}
+        </View>
+    );
+});
+
+const SummaryRow = memo(({
+    label,
+    value,
+    subtitle,
+    isTotal = false,
+}: {
+    label: string;
+    value: string;
+    subtitle?: string;
+    isTotal?: boolean;
+}) => {
+    const colors = useTheme();
+
+    return (
+        <View style={styles.summaryRow}>
+            <View>
+                <Text
+                    style={[
+                        isTotal ? styles.totalLabel : styles.summaryLabel,
+                        { color: isTotal ? colors.textPrimary : colors.textDescription },
+                    ]}
+                >
+                    {label}
+                </Text>
+                {subtitle && (
+                    <Text style={[styles.deliveryNote, { color: colors.textLabel }]}>
+                        {subtitle}
+                    </Text>
+                )}
+            </View>
+            <Text
+                style={[
+                    isTotal ? styles.totalValue : styles.summaryValue,
+                    { color: isTotal ? colors.themePrimary : colors.textPrimary },
+                ]}
+            >
+                {value}
+            </Text>
+        </View>
+    );
+});
+
+const OrderSummary = memo(({ itemCount, cartTotal, deliveryCharge, total }: OrderSummaryProps) => {
+    const colors = useTheme();
+
+    return (
+        <View style={styles.section}>
+            <SectionHeader icon="receipt" title="Order Summary" />
+
+            <View style={[styles.summaryCard, { backgroundColor: colors.backgroundSecondary }]}>
+                <SummaryRow
+                    label={`Items (${itemCount})`}
+                    value={formatCurrency(cartTotal)}
+                />
+
+                <SummaryRow
+                    label="Delivery Charge"
+                    value={deliveryCharge > 0 ? formatCurrency(deliveryCharge) : 'FREE'}
+                    subtitle={deliveryCharge > 0 ? 'Standard delivery' : undefined}
+                />
+
+                <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+                <SummaryRow
+                    label="Total Amount"
+                    value={formatCurrency(total)}
+                    isTotal
+                />
+            </View>
+        </View>
+    );
+});
+
+const PaymentMethod = memo(() => {
+    const colors = useTheme();
+    const method = PAYMENT_METHODS.COD;
+
+    return (
+        <View style={styles.section}>
+            <SectionHeader icon="cash" title="Payment Method" />
+
+            <View style={[styles.paymentCard, { backgroundColor: colors.backgroundSecondary }]}>
+                <View style={styles.paymentMethod}>
+                    <Icon name={method.icon} size={24} color={colors.themePrimary} />
+                    <View style={styles.paymentInfo}>
+                        <Text style={[styles.paymentMethodName, { color: colors.textPrimary }]}>
+                            {method.name}
+                        </Text>
+                        <Text style={[styles.paymentMethodDesc, { color: colors.textDescription }]}>
+                            {method.description}
+                        </Text>
+                    </View>
+                    <View style={[styles.selectedPaymentBadge, { backgroundColor: colors.themePrimary }]}>
+                        <Icon name="check" size={16} color={colors.white} />
+                    </View>
+                </View>
+            </View>
+        </View>
+    );
+});
+
+const CheckoutFooter = memo(({
+    total,
+    loading,
+    disabled,
+    onPlaceOrder,
+}: {
+    total: number;
+    loading: boolean;
+    disabled: boolean;
+    onPlaceOrder: () => void;
+}) => {
+    const colors = useTheme();
+
+    return (
+        <View
+            style={[
+                styles.footer,
+                {
+                    backgroundColor: colors.backgroundPrimary,
+                    borderTopColor: colors.border,
+                },
+            ]}
+        >
+            <View>
+                <Text style={[styles.footerLabel, { color: colors.textLabel }]}>
+                    Total Amount
+                </Text>
+                <Text style={[styles.footerTotal, { color: colors.themePrimary }]}>
+                    {formatCurrency(total)}
+                </Text>
+            </View>
+
+            <AppTouchableRipple
+                style={[
+                    styles.placeOrderButton,
+                    {
+                        backgroundColor: disabled ? colors.buttonDisabled : colors.themePrimary,
+                    },
+                ]}
+                onPress={onPlaceOrder}
+                disabled={disabled}
+            >
+                {loading ? (
+                    <ActivityIndicator color={colors.white} />
+                ) : (
+                    <>
+                        <Text style={[styles.placeOrderText, { color: colors.white }]}>
+                            Place Order
+                        </Text>
+                        <Icon name="arrow-right" size={20} color={colors.white} />
+                    </>
+                )}
+            </AppTouchableRipple>
+        </View>
+    );
+});
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
 const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) => {
     const colors = useTheme();
     const { cartItems, cartTotal, clearCart } = useCart();
     const { addresses, selectedAddress, selectAddress } = useAddress();
+
+    // ============================================================================
+    // STATE
+    // ============================================================================
     const [loading, setLoading] = useState<boolean>(false);
     const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
 
+    // ============================================================================
+    // COMPUTED VALUES
+    // ============================================================================
+    const deliveryCharge = useMemo(
+        () => (cartItems.length > 0 ? DELIVERY_CHARGE : 0),
+        [cartItems.length]
+    );
+
+    const total = useMemo(
+        () => cartTotal + deliveryCharge,
+        [cartTotal, deliveryCharge]
+    );
+
+    const isPlaceOrderDisabled = useMemo(
+        () => loading || !selectedAddressId,
+        [loading, selectedAddressId]
+    );
+
+    const selectedAddressData = useMemo(
+        () => addresses.find((a) => a.id === selectedAddressId),
+        [addresses, selectedAddressId]
+    );
+
+    // ============================================================================
+    // EFFECTS
+    // ============================================================================
     useEffect(() => {
         if (selectedAddress) {
             setSelectedAddressId(selectedAddress.id);
         } else if (addresses.length > 0) {
-            const defaultAddress = addresses.find(addr => addr.isDefault) || addresses[0];
-            setSelectedAddressId(defaultAddress.id);
+            const defaultAddress = getDefaultAddress(addresses);
+            if (defaultAddress) {
+                setSelectedAddressId(defaultAddress.id);
+            }
         }
     }, [selectedAddress, addresses]);
 
-    const deliveryCharge = cartItems.length > 0 ? DELIVERY_CHARGE : 0;
-    const total = cartTotal + deliveryCharge;
+    // ============================================================================
+    // HANDLERS
+    // ============================================================================
+    const handleSelectAddress = useCallback(
+        (address: Address) => {
+            setSelectedAddressId(address.id);
+            selectAddress(address.id);
+        },
+        [selectAddress]
+    );
 
-    const handleSelectAddress = useCallback((address: Address) => {
-        setSelectedAddressId(address.id);
-        selectAddress(address.id);
-    }, [selectAddress]);
+    const handleAddAddress = useCallback(() => {
+        navigation.navigate(constant.routeName.addEditAddress, { mode: 'add' });
+    }, [navigation]);
+
+    const handleManageAddresses = useCallback(() => {
+        navigation.navigate(constant.routeName.addressList);
+    }, [navigation]);
 
     const handlePlaceOrder = useCallback(async () => {
+        // Validation
         if (!selectedAddressId) {
             Alert.alert('Address Required', 'Please select a delivery address to continue.');
             return;
@@ -53,9 +496,11 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) => {
             return;
         }
 
+        // Confirmation dialog
         Alert.alert(
             'Confirm Order',
-            `Place order for ₹${total.toFixed(2)}?\n\nDelivery Address:\n${addresses.find(a => a.id === selectedAddressId)?.addressLine1 || ''}`,
+            `Place order for ${formatCurrency(total)}?\n\nDelivery Address:\n${selectedAddressData?.addressLine1 || ''
+            }`,
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -64,7 +509,7 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) => {
                         setLoading(true);
                         try {
                             const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
-                            
+
                             const response = await ApiManager.post({
                                 endpoint: constant.apiEndPoints.createOrder,
                                 params: {
@@ -78,7 +523,7 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) => {
                             if (response?.success || response?.data) {
                                 // Clear cart after successful order
                                 clearCart();
-                                
+
                                 Alert.alert(
                                     'Order Placed Successfully!',
                                     'Your order has been placed and will be delivered soon.',
@@ -109,20 +554,11 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) => {
                 },
             ]
         );
-    }, [selectedAddressId, cartItems.length, total, addresses, clearCart, navigation]);
+    }, [selectedAddressId, cartItems.length, total, selectedAddressData, clearCart, navigation]);
 
-    const handleAddAddress = useCallback(() => {
-        navigation.navigate(constant.routeName.addEditAddress, { mode: 'add' });
-    }, [navigation]);
-
-    const handleManageAddresses = useCallback(() => {
-        navigation.navigate(constant.routeName.addressList);
-    }, [navigation]);
-
-    const formatAddress = (address: Address) => {
-        return `${address.addressLine1}, ${address.city}, ${address.state} - ${address.pincode}`;
-    };
-
+    // ============================================================================
+    // RENDER
+    // ============================================================================
     return (
         <MainContainer
             statusBarColor={colors.themePrimary}
@@ -132,284 +568,52 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) => {
         >
             <View style={[styles.container, { backgroundColor: colors.backgroundPrimary }]}>
                 {/* Header */}
-                <View style={[styles.header, { backgroundColor: colors.themePrimary }]}>
-                    <AppTouchableRipple
-                        style={styles.backButton}
-                        onPress={() => navigation.goBack()}
-                    >
-                        <Icon name="arrow-left" size={24} color={colors.white} />
-                    </AppTouchableRipple>
-                    <Text style={[styles.headerTitle, { color: colors.white }]}>
-                        Checkout
-                    </Text>
-                    <View style={styles.headerRight} />
-                </View>
+                <CheckoutHeader onBack={() => navigation.goBack()} />
 
+                {/* Content */}
                 <ScrollView
                     style={styles.content}
                     contentContainerStyle={styles.contentContainer}
                     showsVerticalScrollIndicator={false}
                 >
-                    {/* Delivery Address Section */}
-                    <View style={styles.section}>
-                        <View style={styles.sectionHeader}>
-                            <Icon name="map-marker" size={20} color={colors.themePrimary} />
-                            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-                                Delivery Address
-                            </Text>
-                        </View>
-
-                        {addresses.length === 0 ? (
-                            <View style={[styles.emptyAddressCard, { backgroundColor: colors.backgroundSecondary }]}>
-                                <Icon name="map-marker-off" size={32} color={colors.textLabel} />
-                                <Text style={[styles.emptyAddressText, { color: colors.textDescription }]}>
-                                    No address found
-                                </Text>
-                                <AppTouchableRipple
-                                    style={[styles.addAddressButton, { backgroundColor: colors.themePrimary }]}
-                                    onPress={handleAddAddress}
-                                >
-                                    <Icon name="plus" size={18} color={colors.white} />
-                                    <Text style={[styles.addAddressButtonText, { color: colors.white }]}>
-                                        Add Address
-                                    </Text>
-                                </AppTouchableRipple>
-                            </View>
-                        ) : (
-                            <>
-                                <ScrollView
-                                    horizontal
-                                    showsHorizontalScrollIndicator={false}
-                                    contentContainerStyle={styles.addressScrollContainer}
-                                >
-                                    {addresses.map((address) => {
-                                        const isSelected = selectedAddressId === address.id;
-                                        return (
-                                            <AppTouchableRipple
-                                                key={address.id}
-                                                style={[
-                                                    styles.addressCard,
-                                                    {
-                                                        backgroundColor: isSelected
-                                                            ? colors.themePrimaryLight
-                                                            : colors.backgroundSecondary,
-                                                        borderColor: isSelected
-                                                            ? colors.themePrimary
-                                                            : colors.border,
-                                                        borderWidth: isSelected ? 2 : 1,
-                                                    },
-                                                ]}
-                                                onPress={() => handleSelectAddress(address)}
-                                            >
-                                                <View style={styles.addressCardHeader}>
-                                                    <View style={styles.addressTypeContainer}>
-                                                        <Icon
-                                                            name={
-                                                                address.addressType === 'Home'
-                                                                    ? 'home'
-                                                                    : address.addressType === 'Work'
-                                                                    ? 'briefcase'
-                                                                    : 'map-marker'
-                                                            }
-                                                            size={16}
-                                                            color={isSelected ? colors.themePrimary : colors.textLabel}
-                                                        />
-                                                        <Text
-                                                            style={[
-                                                                styles.addressType,
-                                                                {
-                                                                    color: isSelected
-                                                                        ? colors.themePrimary
-                                                                        : colors.textLabel,
-                                                                },
-                                                            ]}
-                                                        >
-                                                            {address.addressType}
-                                                        </Text>
-                                                        {address.isDefault && (
-                                                            <View
-                                                                style={[
-                                                                    styles.defaultBadge,
-                                                                    { backgroundColor: colors.themePrimary },
-                                                                ]}
-                                                            >
-                                                                <Text style={[styles.defaultBadgeText, { color: colors.white }]}>
-                                                                    Default
-                                                                </Text>
-                                                            </View>
-                                                        )}
-                                                    </View>
-                                                    {isSelected && (
-                                                        <View
-                                                            style={[
-                                                                styles.selectedBadge,
-                                                                { backgroundColor: colors.themePrimary },
-                                                            ]}
-                                                        >
-                                                            <Icon name="check" size={14} color={colors.white} />
-                                                        </View>
-                                                    )}
-                                                </View>
-                                                <Text
-                                                    style={[
-                                                        styles.addressText,
-                                                        { color: isSelected ? colors.textPrimary : colors.textDescription },
-                                                    ]}
-                                                    numberOfLines={3}
-                                                >
-                                                    {formatAddress(address)}
-                                                </Text>
-                                                <Text
-                                                    style={[
-                                                        styles.addressName,
-                                                        { color: isSelected ? colors.textPrimary : colors.textLabel },
-                                                    ]}
-                                                >
-                                                    {address.fullName} • {address.phone}
-                                                </Text>
-                                            </AppTouchableRipple>
-                                        );
-                                    })}
-                                </ScrollView>
-
-                                <AppTouchableRipple
-                                    style={[styles.manageAddressButton, { backgroundColor: colors.backgroundSecondary }]}
-                                    onPress={handleManageAddresses}
-                                >
-                                    <Icon name="pencil" size={18} color={colors.themePrimary} />
-                                    <Text style={[styles.manageAddressText, { color: colors.themePrimary }]}>
-                                        Manage Addresses
-                                    </Text>
-                                </AppTouchableRipple>
-                            </>
-                        )}
-                    </View>
+                    {/* Delivery Address */}
+                    <AddressSection
+                        addresses={addresses}
+                        selectedAddressId={selectedAddressId}
+                        onSelectAddress={handleSelectAddress}
+                        onAddAddress={handleAddAddress}
+                        onManageAddresses={handleManageAddresses}
+                    />
 
                     {/* Order Summary */}
-                    <View style={styles.section}>
-                        <View style={styles.sectionHeader}>
-                            <Icon name="receipt" size={20} color={colors.themePrimary} />
-                            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-                                Order Summary
-                            </Text>
-                        </View>
-
-                        <View style={[styles.summaryCard, { backgroundColor: colors.backgroundSecondary }]}>
-                            <View style={styles.summaryRow}>
-                                <Text style={[styles.summaryLabel, { color: colors.textDescription }]}>
-                                    Items ({cartItems.length})
-                                </Text>
-                                <Text style={[styles.summaryValue, { color: colors.textPrimary }]}>
-                                    ₹{cartTotal.toFixed(2)}
-                                </Text>
-                            </View>
-
-                            <View style={styles.summaryRow}>
-                                <View>
-                                    <Text style={[styles.summaryLabel, { color: colors.textDescription }]}>
-                                        Delivery Charge
-                                    </Text>
-                                    {deliveryCharge > 0 && (
-                                        <Text style={[styles.deliveryNote, { color: colors.textLabel }]}>
-                                            Standard delivery
-                                        </Text>
-                                    )}
-                                </View>
-                                <Text style={[styles.summaryValue, { color: colors.textPrimary }]}>
-                                    {deliveryCharge > 0 ? `₹${deliveryCharge}` : 'FREE'}
-                                </Text>
-                            </View>
-
-                            <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-                            <View style={styles.summaryRow}>
-                                <Text style={[styles.totalLabel, { color: colors.textPrimary }]}>
-                                    Total Amount
-                                </Text>
-                                <Text style={[styles.totalValue, { color: colors.themePrimary }]}>
-                                    ₹{total.toFixed(2)}
-                                </Text>
-                            </View>
-                        </View>
-                    </View>
+                    <OrderSummary
+                        itemCount={cartItems.length}
+                        cartTotal={cartTotal}
+                        deliveryCharge={deliveryCharge}
+                        total={total}
+                    />
 
                     {/* Payment Method */}
-                    <View style={styles.section}>
-                        <View style={styles.sectionHeader}>
-                            <Icon name="cash" size={20} color={colors.themePrimary} />
-                            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-                                Payment Method
-                            </Text>
-                        </View>
-
-                        <View style={[styles.paymentCard, { backgroundColor: colors.backgroundSecondary }]}>
-                            <View style={styles.paymentMethod}>
-                                <Icon name="cash-multiple" size={24} color={colors.themePrimary} />
-                                <View style={styles.paymentInfo}>
-                                    <Text style={[styles.paymentMethodName, { color: colors.textPrimary }]}>
-                                        Cash on Delivery
-                                    </Text>
-                                    <Text style={[styles.paymentMethodDesc, { color: colors.textDescription }]}>
-                                        Pay when you receive your order
-                                    </Text>
-                                </View>
-                                <View style={[styles.selectedPaymentBadge, { backgroundColor: colors.themePrimary }]}>
-                                    <Icon name="check" size={16} color={colors.white} />
-                                </View>
-                            </View>
-                        </View>
-                    </View>
+                    <PaymentMethod />
                 </ScrollView>
 
-                {/* Place Order Button */}
-                <View
-                    style={[
-                        styles.footer,
-                        {
-                            backgroundColor: colors.backgroundPrimary,
-                            borderTopColor: colors.border,
-                        },
-                    ]}
-                >
-                    <View>
-                        <Text style={[styles.footerLabel, { color: colors.textLabel }]}>
-                            Total Amount
-                        </Text>
-                        <Text style={[styles.footerTotal, { color: colors.themePrimary }]}>
-                            ₹{total.toFixed(2)}
-                        </Text>
-                    </View>
-                    <AppTouchableRipple
-                        style={[
-                            styles.placeOrderButton,
-                            {
-                                backgroundColor: loading || !selectedAddressId
-                                    ? colors.buttonDisabled
-                                    : colors.themePrimary,
-                            },
-                        ]}
-                        onPress={handlePlaceOrder}
-                        disabled={loading || !selectedAddressId}
-                    >
-                        {loading ? (
-                            <ActivityIndicator color={colors.white} />
-                        ) : (
-                            <>
-                                <Text style={[styles.placeOrderText, { color: colors.white }]}>
-                                    Place Order
-                                </Text>
-                                <Icon name="arrow-right" size={20} color={colors.white} />
-                            </>
-                        )}
-                    </AppTouchableRipple>
-                </View>
+                {/* Footer with Place Order Button */}
+                <CheckoutFooter
+                    total={total}
+                    loading={loading}
+                    disabled={isPlaceOrderDisabled}
+                    onPlaceOrder={handlePlaceOrder}
+                />
             </View>
         </MainContainer>
     );
 };
 
-export default CheckoutScreen;
+export default memo(CheckoutScreen);
 
+// ============================================================================
+// STYLES
+// ============================================================================
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -649,4 +853,3 @@ const styles = StyleSheet.create({
         fontFamily: fonts.family.primaryBold,
     },
 });
-

@@ -1,63 +1,35 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, memo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+
 import MainContainer from '../../container/MainContainer';
 import { useTheme } from '../../contexts/ThemeProvider';
-import fonts from '../../styles/fonts';
-import AppTouchableRipple from '../../components/AppTouchableRipple';
-import StorageManager from '../../managers/StorageManager';
-import ApiManager from '../../managers/ApiManager';
-import constant from '../../utilities/constant';
 import { useCart } from '../../contexts/CardContext';
 import { useAddress, Address } from '../../contexts/AddressContext';
 import { useWishlist } from '../../contexts/WishlistContext';
-import { ProductListScreenProps, Product as ProductListProduct } from './ProductListScreen';
+import AppTouchableRipple from '../../components/AppTouchableRipple';
 import BannerCarousel, { Banner } from '../../components/BannerCarousel';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useVoiceSearch } from '../../hooks/useVoiceSearch';
 import VoiceSearchButton from '../../components/VoiceSearchButton';
 import VoiceSearchOverlay from '../../popups/VoiceSearchOverlay';
 import AddressSelectionModal from '../../popups/AddressSelectionModal';
+import { useVoiceSearch } from '../../hooks/useVoiceSearch';
+import StorageManager from '../../managers/StorageManager';
+import ApiManager from '../../managers/ApiManager';
+import fonts from '../../styles/fonts';
+import constant from '../../utilities/constant';
+import { ProductListScreenProps, Product as ProductListProduct } from './ProductListScreen';
 import { CategoryDetailScreenProps } from './CategoryDetailScreen';
 
-interface HomeScreenProps {
-    navigation: NativeStackNavigationProp<any>;
-}
-
-interface Category {
-    id: number;
-    name: string;
-    description?: string;
-    image?: string;
-    image_url?: string;
-    product_count?: number;
-}
-
-const getImageUrl = (imagePath: string | null | undefined) => {
-    if (!imagePath) return null;
-    if (imagePath.startsWith('http')) return imagePath;
-    return `https://gayatriorganicfarm.com/storage/${imagePath}`;
-};
-
-// Default category icons mapping (fallback when no image)
-const getCategoryIcon = (categoryName: string): string => {
-    const name = categoryName.toLowerCase();
-    if (name.includes('vegetable') || name.includes('veggie')) return '🥬';
-    if (name.includes('fruit')) return '🍎';
-    if (name.includes('grain') || name.includes('cereal')) return '🌾';
-    if (name.includes('dairy') || name.includes('milk')) return '🥛';
-    if (name.includes('spice') || name.includes('masala')) return '🌶️';
-    if (name.includes('pulse') || name.includes('dal')) return '🫘';
-    return '📦'; // Default icon
-};
-
-// Default category colors
-const getCategoryColor = (index: number): string => {
-    const colors = ['#4caf50', '#ff9800', '#795548', '#2196f3', '#9c27b0', '#f44336'];
-    return colors[index % colors.length];
-};
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+const MAX_CATEGORIES_DISPLAY = 8;
+const MAX_FEATURED_PRODUCTS = 6;
+const VOICE_SEARCH_LANGUAGE = 'en-US';
+const VOICE_SEARCH_DISPLAY_LANGUAGE = 'English (United States)';
+const BASE_IMAGE_URL = 'https://gayatriorganicfarm.com/storage/';
 
 const BANNERS: Banner[] = [
     {
@@ -94,12 +66,485 @@ const BANNERS: Banner[] = [
     },
 ];
 
+const CATEGORY_COLORS = ['#4caf50', '#ff9800', '#795548', '#2196f3', '#9c27b0', '#f44336'];
+
+const CATEGORY_ICONS: Record<string, string> = {
+    vegetable: '🥬',
+    veggie: '🥬',
+    fruit: '🍎',
+    grain: '🌾',
+    cereal: '🌾',
+    dairy: '🥛',
+    milk: '🥛',
+    spice: '🌶️',
+    masala: '🌶️',
+    pulse: '🫘',
+    dal: '🫘',
+};
+
+const WHY_CHOOSE_US_FEATURES = [
+    { icon: '✅', text: '100% Organic Products' },
+    { icon: '🚚', text: 'Fast Home Delivery' },
+    { icon: '💰', text: 'Best Prices Guaranteed' },
+];
+
+// ============================================================================
+// TYPES
+// ============================================================================
+interface HomeScreenProps {
+    navigation: NativeStackNavigationProp<any>;
+}
+
+interface Category {
+    id: number;
+    name: string;
+    description?: string;
+    image?: string;
+    image_url?: string;
+    product_count?: number;
+}
+
+interface HeaderProps {
+    userName: string;
+    selectedAddress: Address | null;
+    cartCount: number;
+    wishlistCount: number;
+    onAddressPress: () => void;
+    onCartPress: () => void;
+    onWishlistPress: () => void;
+}
+
+interface SearchBarProps {
+    isListening: boolean;
+    isVoiceAvailable: boolean;
+    onSearchPress: () => void;
+    onVoicePress: () => void;
+}
+
+interface CategoryCardProps {
+    category: Category;
+    index: number;
+    onPress: (category: Category) => void;
+}
+
+interface ProductCardProps {
+    product: ProductListProduct;
+    isInCart: boolean;
+    onPress: (product: ProductListProduct) => void;
+    onAddToCart: (product: ProductListProduct) => void;
+}
+
+interface SectionProps {
+    title: string;
+    onViewAll?: () => void;
+    loading?: boolean;
+    isEmpty?: boolean;
+    emptyMessage?: string;
+    children: React.ReactNode;
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+const getImageUrl = (imagePath: string | null | undefined): string | null => {
+    if (!imagePath) return null;
+    if (imagePath.startsWith('http')) return imagePath;
+    return `${BASE_IMAGE_URL}${imagePath}`;
+};
+
+const getCategoryIcon = (categoryName: string): string => {
+    const name = categoryName.toLowerCase();
+    for (const [key, icon] of Object.entries(CATEGORY_ICONS)) {
+        if (name.includes(key)) return icon;
+    }
+    return '📦';
+};
+
+const getCategoryColor = (index: number): string => {
+    return CATEGORY_COLORS[index % CATEGORY_COLORS.length];
+};
+
+const formatAddress = (address: Address | null): string => {
+    if (!address) return 'No address selected';
+    return `${address.addressLine1}, ${address.city}, ${address.state} - ${address.pincode}`;
+};
+
+const formatPrice = (price: string | number): string => {
+    return `₹${parseFloat(price.toString()).toFixed(2)}`;
+};
+
+// ============================================================================
+// SUB COMPONENTS
+// ============================================================================
+const HomeHeader = memo(({
+    userName,
+    selectedAddress,
+    cartCount,
+    wishlistCount,
+    onAddressPress,
+    onCartPress,
+    onWishlistPress,
+}: HeaderProps) => {
+    const colors = useTheme();
+
+    return (
+        <View style={[styles.header, { backgroundColor: colors.themePrimary }]}>
+            <View style={styles.headerContent}>
+                {/* User Info & Address */}
+                <View style={styles.userInfo}>
+                    <Text style={[styles.greeting, { color: colors.white }]}>
+                        Hello,
+                    </Text>
+                    <Text style={[styles.userName, { color: colors.white }]}>
+                        {userName}! 👋
+                    </Text>
+
+                    <AppTouchableRipple
+                        style={[styles.addressContainer, { backgroundColor: 'rgba(255,255,255,0.15)' }]}
+                        onPress={onAddressPress}
+                    >
+                        <Icon name="map-marker" size={16} color={colors.white} />
+                        <View style={styles.addressTextContainer}>
+                            <Text style={[styles.addressText, { color: colors.white }]} numberOfLines={1}>
+                                {formatAddress(selectedAddress)}
+                            </Text>
+                        </View>
+                        <Icon name="chevron-down" size={18} color={colors.white} />
+                    </AppTouchableRipple>
+                </View>
+
+                {/* Header Actions */}
+                <View style={styles.headerActions}>
+                    {/* Wishlist Button */}
+                    <AppTouchableRipple
+                        style={[styles.wishlistButton, { backgroundColor: 'rgba(255,255,255,0.15)' }]}
+                        onPress={onWishlistPress}
+                    >
+                        <Icon name="heart" size={24} color={colors.white} />
+                        {wishlistCount > 0 && (
+                            <View style={[styles.wishlistBadge, { backgroundColor: '#ff4444' }]}>
+                                <Text style={[styles.wishlistBadgeText, { color: colors.white }]}>
+                                    {wishlistCount}
+                                </Text>
+                            </View>
+                        )}
+                    </AppTouchableRipple>
+
+                    {/* Cart Button */}
+                    {cartCount > 0 && (
+                        <AppTouchableRipple
+                            style={[styles.cartButton, { backgroundColor: colors.white }]}
+                            onPress={onCartPress}
+                        >
+                            <Text style={styles.cartIcon}>🛒</Text>
+                            <View style={[styles.cartBadge, { backgroundColor: '#ff4444' }]}>
+                                <Text style={[styles.cartBadgeText, { color: colors.white }]}>
+                                    {cartCount}
+                                </Text>
+                            </View>
+                        </AppTouchableRipple>
+                    )}
+                </View>
+            </View>
+        </View>
+    );
+});
+
+const SearchBar = memo(({ isListening, isVoiceAvailable, onSearchPress, onVoicePress }: SearchBarProps) => {
+    const colors = useTheme();
+
+    return (
+        <View
+            style={[
+                styles.searchContainer,
+                {
+                    backgroundColor: 'rgba(112, 209, 152, 0.2)',
+                    borderColor: colors.themePrimary,
+                },
+            ]}
+        >
+            <TouchableOpacity
+                style={styles.searchTouchable}
+                onPress={onSearchPress}
+                activeOpacity={0.7}
+            >
+                <Icon name="magnify" size={20} color={colors.themePrimary} />
+                <Text style={[styles.searchPlaceholder, { color: colors.themePrimary }]}>
+                    Search products
+                </Text>
+                <Icon name="arrow-right" size={20} color={colors.themePrimary} />
+            </TouchableOpacity>
+            <VoiceSearchButton
+                isListening={isListening}
+                isAvailable={isVoiceAvailable}
+                onPress={onVoicePress}
+                colors={colors}
+                size={20}
+            />
+        </View>
+    );
+});
+
+const SectionHeader = memo(({ title, onViewAll }: { title: string; onViewAll?: () => void }) => {
+    const colors = useTheme();
+
+    return (
+        <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                {title}
+            </Text>
+            {onViewAll && (
+                <AppTouchableRipple onPress={onViewAll}>
+                    <View style={styles.viewAllButton}>
+                        <Text style={[styles.viewAll, { color: colors.themePrimary }]}>
+                            View All
+                        </Text>
+                        <Icon name="arrow-right" size={16} color={colors.themePrimary} />
+                    </View>
+                </AppTouchableRipple>
+            )}
+        </View>
+    );
+});
+
+const LoadingState = memo(({ message }: { message: string }) => {
+    const colors = useTheme();
+
+    return (
+        <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={colors.themePrimary} />
+            <Text style={[styles.loadingText, { color: colors.textLabel }]}>
+                {message}
+            </Text>
+        </View>
+    );
+});
+
+const EmptyState = memo(({ message }: { message: string }) => {
+    const colors = useTheme();
+
+    return (
+        <View style={styles.emptyContainer}>
+            <Text style={[styles.emptyText, { color: colors.textLabel }]}>
+                {message}
+            </Text>
+        </View>
+    );
+});
+
+const CategoryCard = memo(({ category, index, onPress }: CategoryCardProps) => {
+    const colors = useTheme();
+    const imageUrl = getImageUrl(category.image || category.image_url);
+
+    return (
+        <AppTouchableRipple
+            style={[styles.categoryCard, { backgroundColor: colors.backgroundSecondary }]}
+            onPress={() => onPress(category)}
+        >
+            {imageUrl ? (
+                <Image
+                    source={{ uri: imageUrl }}
+                    style={styles.categoryImage}
+                    resizeMode="cover"
+                />
+            ) : (
+                <View
+                    style={[
+                        styles.categoryIconContainer,
+                        { backgroundColor: getCategoryColor(index) + '20' },
+                    ]}
+                >
+                    <Text style={styles.categoryIcon}>{getCategoryIcon(category.name)}</Text>
+                </View>
+            )}
+            <Text style={[styles.categoryName, { color: colors.textPrimary }]} numberOfLines={2}>
+                {category.name}
+            </Text>
+            {category.product_count !== undefined && (
+                <Text style={[styles.categoryCount, { color: colors.textLabel }]}>
+                    {category.product_count} items
+                </Text>
+            )}
+        </AppTouchableRipple>
+    );
+});
+
+const ProductCard = memo(({ product, isInCart, onPress, onAddToCart }: ProductCardProps) => {
+    const colors = useTheme();
+    const imageUrl = product.image1 ? `${BASE_IMAGE_URL}${product.image1}` : null;
+
+    return (
+        <AppTouchableRipple
+            style={[styles.productCard, { backgroundColor: colors.backgroundSecondary }]}
+            onPress={() => onPress(product)}
+        >
+            {imageUrl ? (
+                <Image
+                    source={{ uri: imageUrl }}
+                    style={styles.productImage}
+                    resizeMode="cover"
+                />
+            ) : (
+                <View style={[styles.productImagePlaceholder, { backgroundColor: colors.themePrimaryLight }]}>
+                    <Icon name="image-off" size={32} color={colors.themePrimary} />
+                </View>
+            )}
+
+            <Text style={[styles.productName, { color: colors.textPrimary }]} numberOfLines={2}>
+                {product.name}
+            </Text>
+
+            <Text style={[styles.productUnit, { color: colors.textLabel }]}>
+                {product.category?.name || 'Product'}
+            </Text>
+
+            <View style={styles.productFooter}>
+                <Text style={[styles.productPrice, { color: colors.themePrimary }]}>
+                    {formatPrice(product.price)}
+                </Text>
+                <AppTouchableRipple
+                    style={[
+                        styles.addButton,
+                        {
+                            backgroundColor: isInCart
+                                ? colors.themePrimary
+                                : colors.themePrimaryLight,
+                        },
+                    ]}
+                    onPress={(e) => {
+                        e?.stopPropagation();
+                        onAddToCart(product);
+                    }}
+                >
+                    <Text
+                        style={[
+                            styles.addButtonText,
+                            {
+                                color: isInCart ? colors.white : colors.themePrimary,
+                            },
+                        ]}
+                    >
+                        {isInCart ? '✓' : '+'}
+                    </Text>
+                </AppTouchableRipple>
+            </View>
+        </AppTouchableRipple>
+    );
+});
+
+const CategoriesSection = memo(({
+    categories,
+    loading,
+    onCategoryPress,
+    onViewAll,
+}: {
+    categories: Category[];
+    loading: boolean;
+    onCategoryPress: (category: Category) => void;
+    onViewAll: () => void;
+}) => {
+    return (
+        <View style={styles.section}>
+            <SectionHeader title="Shop by Category" onViewAll={onViewAll} />
+
+            {loading ? (
+                <LoadingState message="Loading categories..." />
+            ) : categories.length > 0 ? (
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.categoriesContainer}
+                >
+                    {categories.map((category, index) => (
+                        <CategoryCard
+                            key={category.id}
+                            category={category}
+                            index={index}
+                            onPress={onCategoryPress}
+                        />
+                    ))}
+                </ScrollView>
+            ) : (
+                <EmptyState message="No categories available" />
+            )}
+        </View>
+    );
+});
+
+const FeaturedProductsSection = memo(({
+    products,
+    loading,
+    isInCart,
+    onProductPress,
+    onAddToCart,
+    onViewAll,
+}: {
+    products: ProductListProduct[];
+    loading: boolean;
+    isInCart: (id: number) => boolean;
+    onProductPress: (product: ProductListProduct) => void;
+    onAddToCart: (product: ProductListProduct) => void;
+    onViewAll: () => void;
+}) => {
+    return (
+        <View style={styles.section}>
+            <SectionHeader title="Featured Products" onViewAll={onViewAll} />
+
+            {loading ? (
+                <LoadingState message="Loading products..." />
+            ) : products.length > 0 ? (
+                <View style={styles.productsGrid}>
+                    {products.map((product) => (
+                        <ProductCard
+                            key={product.id}
+                            product={product}
+                            isInCart={isInCart(product.id)}
+                            onPress={onProductPress}
+                            onAddToCart={onAddToCart}
+                        />
+                    ))}
+                </View>
+            ) : (
+                <EmptyState message="No featured products available" />
+            )}
+        </View>
+    );
+});
+
+const WhyChooseUsSection = memo(() => {
+    const colors = useTheme();
+
+    return (
+        <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                Why Choose Us?
+            </Text>
+            <View style={[styles.featuresCard, { backgroundColor: colors.backgroundSecondary }]}>
+                {WHY_CHOOSE_US_FEATURES.map((feature, index) => (
+                    <View key={index} style={styles.featureItem}>
+                        <Text style={styles.featureIcon}>{feature.icon}</Text>
+                        <Text style={[styles.featureText, { color: colors.textPrimary }]}>
+                            {feature.text}
+                        </Text>
+                    </View>
+                ))}
+            </View>
+        </View>
+    );
+});
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
 const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     const colors = useTheme();
-    const insets = useSafeAreaInsets();
     const { addToCart, isInCart, cartCount } = useCart();
     const { wishlistCount } = useWishlist();
     const { selectedAddress, addresses, selectAddress } = useAddress();
+
+    // ============================================================================
+    // STATE
+    // ============================================================================
     const [userName, setUserName] = useState<string>('Guest');
     const [showAddressModal, setShowAddressModal] = useState(false);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -107,6 +552,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     const [categoriesLoading, setCategoriesLoading] = useState<boolean>(false);
     const [productsLoading, setProductsLoading] = useState<boolean>(false);
 
+    // ============================================================================
+    // EFFECTS
+    // ============================================================================
     useEffect(() => {
         const loadUserData = async () => {
             try {
@@ -121,7 +569,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         loadUserData();
     }, []);
 
-    // Fetch categories
+    // ============================================================================
+    // API HANDLERS
+    // ============================================================================
     const fetchCategories = useCallback(async () => {
         setCategoriesLoading(true);
         try {
@@ -130,15 +580,17 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             const response = await ApiManager.get({
                 endpoint: constant.apiEndPoints.allCategories,
                 token: token || undefined,
-                showError: false, // Don't show error on home screen
+                showError: false,
             });
 
-            if (response?.data && Array.isArray(response.data)) {
-                // Take first 8 categories for home screen
-                setCategories(response.data.slice(0, 8));
-            } else if (response?.success && response?.data && Array.isArray(response.data)) {
-                setCategories(response.data.slice(0, 8));
-            }
+            const categoryData =
+                response?.data && Array.isArray(response.data)
+                    ? response.data
+                    : response?.success && Array.isArray(response?.data)
+                        ? response.data
+                        : [];
+
+            setCategories(categoryData.slice(0, MAX_CATEGORIES_DISPLAY));
         } catch (error) {
             console.error('Error fetching categories:', error);
         } finally {
@@ -146,7 +598,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         }
     }, []);
 
-    // Fetch featured products
     const fetchFeaturedProducts = useCallback(async () => {
         setProductsLoading(true);
         try {
@@ -155,22 +606,21 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             const response = await ApiManager.get({
                 endpoint: constant.apiEndPoints.allProducts,
                 token: token || undefined,
-                showError: false, // Don't show error on home screen
+                showError: false,
             });
 
-            if (response?.data && Array.isArray(response.data)) {
-                // Take first 6 products as featured products
-                // You can also filter by featured flag if your API supports it
-                const products = response.data
-                    .filter((p: ProductListProduct) => p.stock > 0) // Only in-stock products
-                    .slice(0, 6);
-                setFeaturedProducts(products);
-            } else if (response?.success && response?.data && Array.isArray(response.data)) {
-                const products = response.data
-                    .filter((p: ProductListProduct) => p.stock > 0)
-                    .slice(0, 6);
-                setFeaturedProducts(products);
-            }
+            const productData =
+                response?.data && Array.isArray(response.data)
+                    ? response.data
+                    : response?.success && Array.isArray(response?.data)
+                        ? response.data
+                        : [];
+
+            const inStockProducts = productData
+                .filter((p: ProductListProduct) => p.stock > 0)
+                .slice(0, MAX_FEATURED_PRODUCTS);
+
+            setFeaturedProducts(inStockProducts);
         } catch (error) {
             console.error('Error fetching featured products:', error);
         } finally {
@@ -178,7 +628,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         }
     }, []);
 
-    // Load data on screen focus
     useFocusEffect(
         useCallback(() => {
             fetchCategories();
@@ -186,56 +635,130 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         }, [fetchCategories, fetchFeaturedProducts])
     );
 
-    const handleAddToCart = useCallback((product: ProductListProduct) => {
-        if (product.stock === 0) {
-            Alert.alert('Out of Stock', 'This product is currently out of stock.');
-            return;
-        }
-
-        if (isInCart(product.id)) {
-            navigation.navigate(constant.routeName.cart);
-        } else {
-            addToCart({
-                id: product.id,
-                name: product.name,
-                price: parseFloat(product.price),
-                image: product.image1,
-                unit: 'pc',
-                quantity: 1,
-                categoryId: product.category_id || product.category?.id,
-                productId: product.id,
-            });
-            Alert.alert(
-                'Added to Cart',
-                `${product.name} has been added to your cart`,
-                [
-                    { text: 'Continue Shopping', style: 'cancel' },
-                    { text: 'View Cart', onPress: () => navigation.navigate(constant.routeName.cart) },
-                ]
-            );
-        }
-    }, [isInCart, addToCart, navigation]);
-
-    const handleProductPress = useCallback((product: ProductListProduct) => {
-        navigation.navigate(constant.routeName.productDetail, { productId: product.id });
-    }, [navigation]);
-
+    // ============================================================================
+    // NAVIGATION HANDLERS
+    // ============================================================================
     const handleSearchPress = useCallback(() => {
-        const propsToSend: ProductListScreenProps = {
-            focusSearch: true
-        };
+        const propsToSend: ProductListScreenProps = { focusSearch: true };
         navigation.navigate(constant.routeName.products, propsToSend);
     }, [navigation]);
 
-    const handleVoiceResult = useCallback((text: string) => {
-        console.log('Voice result received:', text);
-        // Navigate to ProductListScreen with the voice search query
-        const propsToSend: ProductListScreenProps = {
-            focusSearch: true,
-            initialQuery: text
-        };
-        navigation.navigate(constant.routeName.products, propsToSend);
+    const handleCategoryPress = useCallback(
+        (category: Category) => {
+            if (!category || !category.id) {
+                console.error('❌ Invalid category data:', category);
+                return;
+            }
+            const propsToSend: CategoryDetailScreenProps = {
+                categoryId: category.id,
+                categoryName: category.name,
+            };
+            navigation.navigate(constant.routeName.categoryDetail, { params: propsToSend });
+        },
+        [navigation]
+    );
+
+    const handleProductPress = useCallback(
+        (product: ProductListProduct) => {
+            navigation.navigate(constant.routeName.productDetail, { productId: product.id });
+        },
+        [navigation]
+    );
+
+    const handleViewAllProducts = useCallback(() => {
+        navigation.navigate(constant.routeName.products);
     }, [navigation]);
+
+    const handleViewAllCategories = useCallback(() => {
+        navigation.navigate(constant.routeName.categories);
+    }, [navigation]);
+
+    const handleWishlistPress = useCallback(() => {
+        navigation.navigate(constant.routeName.wishlist);
+    }, [navigation]);
+
+    const handleCartPress = useCallback(() => {
+        navigation.navigate(constant.routeName.cart);
+    }, [navigation]);
+
+    // ============================================================================
+    // CART HANDLERS
+    // ============================================================================
+    const handleAddToCart = useCallback(
+        (product: ProductListProduct) => {
+            if (product.stock === 0) {
+                Alert.alert('Out of Stock', 'This product is currently out of stock.');
+                return;
+            }
+
+            if (isInCart(product.id)) {
+                navigation.navigate(constant.routeName.cart);
+            } else {
+                addToCart({
+                    id: product.id,
+                    name: product.name,
+                    price: parseFloat(product.price),
+                    image: product.image1,
+                    unit: 'pc',
+                    quantity: 1,
+                    categoryId: product.category_id || product.category?.id,
+                    productId: product.id,
+                });
+                Alert.alert(
+                    'Added to Cart',
+                    `${product.name} has been added to your cart`,
+                    [
+                        { text: 'Continue Shopping', style: 'cancel' },
+                        { text: 'View Cart', onPress: () => navigation.navigate(constant.routeName.cart) },
+                    ]
+                );
+            }
+        },
+        [isInCart, addToCart, navigation]
+    );
+
+    // ============================================================================
+    // ADDRESS HANDLERS
+    // ============================================================================
+    const handleAddressPress = useCallback(() => {
+        if (addresses.length === 0) {
+            navigation.navigate(constant.routeName.addEditAddress, { mode: 'add' });
+        } else {
+            setShowAddressModal(true);
+        }
+    }, [addresses.length, navigation]);
+
+    const handleSelectAddress = useCallback(
+        async (address: Address) => {
+            try {
+                await selectAddress(address.id);
+                setShowAddressModal(false);
+            } catch (error) {
+                Alert.alert('Error', 'Failed to select address. Please try again.');
+            }
+        },
+        [selectAddress]
+    );
+
+    const handleManageAddresses = useCallback(() => {
+        setShowAddressModal(false);
+        navigation.navigate(constant.routeName.addressList);
+    }, [navigation]);
+
+    // ============================================================================
+    // VOICE SEARCH HANDLERS
+    // ============================================================================
+    const handleVoiceResult = useCallback(
+        (text: string) => {
+            console.log('Voice result received:', text);
+            const propsToSend: ProductListScreenProps = {
+                focusSearch: true,
+                initialQuery: text,
+            };
+            navigation.navigate(constant.routeName.products, propsToSend);
+        },
+        [navigation]
+    );
 
     const handleVoiceError = useCallback((error: Error) => {
         console.error('Voice search error:', error);
@@ -244,34 +767,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     const { isListening, isAvailable, startListening, stopListening } = useVoiceSearch({
         onResult: handleVoiceResult,
         onError: handleVoiceError,
-        language: 'en-US',
+        language: VOICE_SEARCH_LANGUAGE,
     });
-
-    // Stop listening when screen loses focus (but not when overlay is shown)
-    useFocusEffect(
-        useCallback(() => {
-            return () => {
-                // Cleanup: stop listening when screen loses focus
-                // Only stop if we're actually leaving the screen (not just showing overlay)
-                if (isListening) {
-                    console.log('[HomeScreen] Screen losing focus, stopping voice recognition');
-                    stopListening();
-                }
-            };
-        }, [isListening, stopListening])
-    );
 
     const handleVoiceButtonPress = useCallback(async () => {
         console.log('Voice button pressed, isListening:', isListening);
 
-        // Prevent rapid clicks
         if (isListening) {
-            // Stop listening
             console.log('[HomeScreen] Stopping voice recognition...');
             await stopListening();
         } else {
-            // Ensure we're not already listening before starting
-            // This prevents double-start issues
             console.log('[HomeScreen] Starting voice recognition...');
             try {
                 await startListening();
@@ -281,65 +786,27 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         }
     }, [isListening, startListening, stopListening]);
 
-    const handleViewAllProducts = useCallback(() => {
-        navigation.navigate(constant.routeName.products);
-    }, [navigation]);
+    useFocusEffect(
+        useCallback(() => {
+            return () => {
+                if (isListening) {
+                    console.log('[HomeScreen] Screen losing focus, stopping voice recognition');
+                    stopListening();
+                }
+            };
+        }, [isListening, stopListening])
+    );
 
-    const handleCategoryPress = useCallback((category: Category) => {
-        if (!category || !category.id) {
-            console.error('❌ Invalid category data:', category);
-            return;
-        }
-        const propsToSend: CategoryDetailScreenProps = {
-            categoryId: category.id,
-            categoryName: category.name,
-        };
-        navigation.navigate(constant.routeName.categoryDetail, { params: propsToSend });
-    }, [navigation]);
-
+    // ============================================================================
+    // BANNER HANDLERS
+    // ============================================================================
     const handleBannerPress = useCallback((banner: Banner) => {
-        // TODO: Implement banner actions based on banner type
-        // For example:
-        // if (banner.id === 1) {
-        //     navigation.navigate('OrganicProducts');
-        // } else if (banner.id === 2) {
-        //     navigation.navigate('DeliveryInfo');
-        // }
         console.log('Banner pressed:', banner.title);
     }, []);
 
-    const handleAddressPress = useCallback(() => {
-        if (addresses.length === 0) {
-            navigation.navigate(constant.routeName.addEditAddress, { mode: 'add' });
-        } else {
-            setShowAddressModal(true);
-        }
-    }, [addresses.length, navigation]);
-
-    const handleSelectAddress = useCallback(async (address: Address) => {
-        try {
-            await selectAddress(address.id);
-            setShowAddressModal(false);
-        } catch (error) {
-            Alert.alert('Error', 'Failed to select address. Please try again.');
-        }
-    }, [selectAddress]);
-
-    const handleManageAddresses = useCallback(() => {
-        setShowAddressModal(false);
-        navigation.navigate(constant.routeName.addressList);
-    }, [navigation]);
-
-    const handleWishlistPress = useCallback(() => {
-        navigation.navigate(constant.routeName.wishlist);
-    }, [navigation]);
-
-    const formatAddress = useCallback((address: Address | null) => {
-        if (!address) return 'No address selected';
-        return `${address.addressLine1}, ${address.city}, ${address.state} - ${address.pincode}`;
-    }, []);
-
-
+    // ============================================================================
+    // RENDER
+    // ============================================================================
     return (
         <MainContainer
             statusBarColor={colors.themePrimary}
@@ -351,95 +818,23 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 showsVerticalScrollIndicator={false}
             >
                 {/* Header */}
-                <View style={[styles.header, { backgroundColor: colors.themePrimary }]}>
-                    <View style={styles.headerContent}>
-                        <View style={styles.userInfo}>
-                            <Text style={[styles.greeting, { color: colors.white }]}>
-                                Hello,
-                            </Text>
-                            <Text style={[styles.userName, { color: colors.white }]}>
-                                {userName}! 👋
-                            </Text>
+                <HomeHeader
+                    userName={userName}
+                    selectedAddress={selectedAddress}
+                    cartCount={cartCount}
+                    wishlistCount={wishlistCount}
+                    onAddressPress={handleAddressPress}
+                    onCartPress={handleCartPress}
+                    onWishlistPress={handleWishlistPress}
+                />
 
-                            {/* Address Display */}
-                            <AppTouchableRipple
-                                style={{ ...styles.addressContainer, backgroundColor: 'rgba(255,255,255,0.15)' }}
-                                onPress={handleAddressPress}
-                            >
-                                <Icon name="map-marker" size={16} color={colors.white} />
-                                <View style={styles.addressTextContainer}>
-                                    <Text
-                                        style={[styles.addressText, { color: colors.white }]}
-                                        numberOfLines={1}
-                                    >
-                                        {formatAddress(selectedAddress)}
-                                    </Text>
-                                </View>
-                                <Icon name="chevron-down" size={18} color={colors.white} />
-                            </AppTouchableRipple>
-                        </View>
-                        <View style={styles.headerActions}>
-                            <AppTouchableRipple
-                                style={{ ...styles.wishlistButton, backgroundColor: 'rgba(255,255,255,0.15)' }}
-                                onPress={handleWishlistPress}
-                            >
-                                <Icon name="heart" size={24} color={colors.white} />
-                                {wishlistCount > 0 && (
-                                    <View
-                                        style={[
-                                            styles.wishlistBadge,
-                                            { backgroundColor: '#ff4444' },
-                                        ]}
-                                    >
-                                        <Text style={[styles.wishlistBadgeText, { color: colors.white }]}>
-                                            {wishlistCount}
-                                        </Text>
-                                    </View>
-                                )}
-                            </AppTouchableRipple>
-                            {cartCount > 0 && (
-                                <AppTouchableRipple
-                                    style={{ ...styles.cartButton, backgroundColor: colors.white }}
-                                    onPress={() => navigation.navigate(constant.routeName.cart)}
-                                >
-                                    <Text style={styles.cartIcon}>🛒</Text>
-                                    <View
-                                        style={[
-                                            styles.cartBadge,
-                                            { backgroundColor: '#ff4444' },
-                                        ]}
-                                    >
-                                        <Text style={[styles.cartBadgeText, { color: colors.white }]}>
-                                            {cartCount}
-                                        </Text>
-                                    </View>
-                                </AppTouchableRipple>
-                            )}
-                        </View>
-                    </View>
-                </View>
-
-                {/* Search Bar - Navigate to Product List */}
-                <View style={[styles.searchContainer, { backgroundColor: 'rgba(112, 209, 152, 0.2)', borderColor: colors.themePrimary }]}>
-                    <TouchableOpacity
-                        style={styles.searchTouchable}
-                        onPress={handleSearchPress}
-                        activeOpacity={0.7}
-                    >
-                        <Icon name="magnify" size={20} color={colors.themePrimary} />
-                        <Text style={[styles.searchPlaceholder, { color: colors.themePrimary }]}>
-                            Search products
-                        </Text>
-                        <Icon name="arrow-right" size={20} color={colors.themePrimary} />
-                    </TouchableOpacity>
-                    <VoiceSearchButton
-                        isListening={isListening}
-                        isAvailable={isAvailable}
-                        onPress={handleVoiceButtonPress}
-                        colors={colors}
-                        size={20}
-                    />
-                </View>
+                {/* Search Bar */}
+                <SearchBar
+                    isListening={isListening}
+                    isVoiceAvailable={isAvailable}
+                    onSearchPress={handleSearchPress}
+                    onVoicePress={handleVoiceButtonPress}
+                />
 
                 {/* Banner Carousel */}
                 <BannerCarousel
@@ -448,203 +843,26 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                     onBannerPress={handleBannerPress}
                 />
 
-                {/* Categories */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-                            Shop by Category
-                        </Text>
-                        <AppTouchableRipple onPress={() => navigation.navigate(constant.routeName.categories)}>
-                            <View style={styles.viewAllButton}>
-                                <Text style={[styles.viewAll, { color: colors.themePrimary }]}>
-                                    View All
-                                </Text>
-                                <Icon name="arrow-right" size={16} color={colors.themePrimary} />
-                            </View>
-                        </AppTouchableRipple>
-                    </View>
-                    {categoriesLoading ? (
-                        <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="small" color={colors.themePrimary} />
-                            <Text style={[styles.loadingText, { color: colors.textLabel }]}>
-                                Loading categories...
-                            </Text>
-                        </View>
-                    ) : categories.length > 0 ? (
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.categoriesContainer}
-                        >
-                            {categories.map((category, index) => {
-                                const imageUrl = getImageUrl(category.image || category.image_url);
-                                return (
-                                    <AppTouchableRipple
-                                        key={category.id}
-                                        style={{ ...styles.categoryCard, backgroundColor: colors.backgroundSecondary }}
-                                        onPress={() => handleCategoryPress(category)}
-                                    >
-                                        {imageUrl ? (
-                                            <Image
-                                                source={{ uri: imageUrl }}
-                                                style={styles.categoryImage}
-                                                resizeMode="cover"
-                                            />
-                                        ) : (
-                                            <View style={[styles.categoryIconContainer, { backgroundColor: getCategoryColor(index) + '20' }]}>
-                                                <Text style={styles.categoryIcon}>{getCategoryIcon(category.name)}</Text>
-                                            </View>
-                                        )}
-                                        <Text style={[styles.categoryName, { color: colors.textPrimary }]} numberOfLines={2}>
-                                            {category.name}
-                                        </Text>
-                                        {category.product_count !== undefined && (
-                                            <Text style={[styles.categoryCount, { color: colors.textLabel }]}>
-                                                {category.product_count} items
-                                            </Text>
-                                        )}
-                                    </AppTouchableRipple>
-                                );
-                            })}
-                        </ScrollView>
-                    ) : (
-                        <View style={styles.emptyContainer}>
-                            <Text style={[styles.emptyText, { color: colors.textLabel }]}>
-                                No categories available
-                            </Text>
-                        </View>
-                    )}
-                </View>
+                {/* Categories Section */}
+                <CategoriesSection
+                    categories={categories}
+                    loading={categoriesLoading}
+                    onCategoryPress={handleCategoryPress}
+                    onViewAll={handleViewAllCategories}
+                />
 
-                {/* Featured Products */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-                            Featured Products
-                        </Text>
-                        <AppTouchableRipple onPress={handleViewAllProducts}>
-                            <View style={styles.viewAllButton}>
-                                <Text style={[styles.viewAll, { color: colors.themePrimary }]}>
-                                    View All
-                                </Text>
-                                <Icon name="arrow-right" size={16} color={colors.themePrimary} />
-                            </View>
-                        </AppTouchableRipple>
-                    </View>
+                {/* Featured Products Section */}
+                <FeaturedProductsSection
+                    products={featuredProducts}
+                    loading={productsLoading}
+                    isInCart={isInCart}
+                    onProductPress={handleProductPress}
+                    onAddToCart={handleAddToCart}
+                    onViewAll={handleViewAllProducts}
+                />
 
-                    {productsLoading ? (
-                        <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="small" color={colors.themePrimary} />
-                            <Text style={[styles.loadingText, { color: colors.textLabel }]}>
-                                Loading products...
-                            </Text>
-                        </View>
-                    ) : featuredProducts.length > 0 ? (
-                        <View style={styles.productsGrid}>
-                            {featuredProducts.map((product) => {
-                                const inCart = isInCart(product.id);
-                                const imageUrl = product.image1 ? `https://gayatriorganicfarm.com/storage/${product.image1}` : null;
-                                return (
-                                    <AppTouchableRipple
-                                        key={product.id}
-                                        style={{ ...styles.productCard, backgroundColor: colors.backgroundSecondary }}
-                                        onPress={() => handleProductPress(product)}
-                                    >
-                                        {imageUrl ? (
-                                            <Image
-                                                source={{ uri: imageUrl }}
-                                                style={styles.productImage}
-                                                resizeMode="cover"
-                                            />
-                                        ) : (
-                                            <View style={[styles.productImagePlaceholder, { backgroundColor: colors.themePrimaryLight }]}>
-                                                <Icon name="image-off" size={32} color={colors.themePrimary} />
-                                            </View>
-                                        )}
-                                        <Text
-                                            style={[styles.productName, { color: colors.textPrimary }]}
-                                            numberOfLines={2}
-                                        >
-                                            {product.name}
-                                        </Text>
-                                        <Text style={[styles.productUnit, { color: colors.textLabel }]}>
-                                            {product.category?.name || 'Product'}
-                                        </Text>
-                                        <View style={styles.productFooter}>
-                                            <Text
-                                                style={[
-                                                    styles.productPrice,
-                                                    { color: colors.themePrimary },
-                                                ]}
-                                            >
-                                                ₹{parseFloat(product.price).toFixed(2)}
-                                            </Text>
-                                            <AppTouchableRipple
-                                                style={{
-                                                    ...styles.addButton,
-                                                    backgroundColor: inCart
-                                                        ? colors.themePrimary
-                                                        : colors.themePrimaryLight,
-                                                }}
-                                                onPress={(e) => {
-                                                    e?.stopPropagation();
-                                                    handleAddToCart(product);
-                                                }}
-                                            >
-                                                <Text
-                                                    style={[
-                                                        styles.addButtonText,
-                                                        {
-                                                            color: inCart
-                                                                ? colors.white
-                                                                : colors.themePrimary,
-                                                        },
-                                                    ]}
-                                                >
-                                                    {inCart ? '✓' : '+'}
-                                                </Text>
-                                            </AppTouchableRipple>
-                                        </View>
-                                    </AppTouchableRipple>
-                                );
-                            })}
-                        </View>
-                    ) : (
-                        <View style={styles.emptyContainer}>
-                            <Text style={[styles.emptyText, { color: colors.textLabel }]}>
-                                No featured products available
-                            </Text>
-                        </View>
-                    )}
-                </View>
-
-                {/* Why Choose Us */}
-                <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-                        Why Choose Us?
-                    </Text>
-                    <View
-                        style={[
-                            styles.featuresCard,
-                            { backgroundColor: colors.backgroundSecondary },
-                        ]}
-                    >
-                        {[
-                            { icon: '✅', text: '100% Organic Products' },
-                            { icon: '🚚', text: 'Fast Home Delivery' },
-                            { icon: '💰', text: 'Best Prices Guaranteed' },
-                        ].map((feature, index) => (
-                            <View key={index} style={styles.featureItem}>
-                                <Text style={styles.featureIcon}>{feature.icon}</Text>
-                                <Text
-                                    style={[styles.featureText, { color: colors.textPrimary }]}
-                                >
-                                    {feature.text}
-                                </Text>
-                            </View>
-                        ))}
-                    </View>
-                </View>
+                {/* Why Choose Us Section */}
+                <WhyChooseUsSection />
             </ScrollView>
 
             {/* Address Selection Modal */}
@@ -662,7 +880,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <VoiceSearchOverlay
                 visible={isListening}
                 isListening={isListening}
-                language="English (United States)"
+                language={VOICE_SEARCH_DISPLAY_LANGUAGE}
                 colors={colors}
                 onClose={stopListening}
             />
@@ -670,8 +888,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     );
 };
 
-export default HomeScreen;
+export default memo(HomeScreen);
 
+// ============================================================================
+// STYLES
+// ============================================================================
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -719,32 +940,6 @@ const styles = StyleSheet.create({
         fontFamily: fonts.family.primaryBold,
         marginTop: 4,
     },
-    cartButton: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        justifyContent: 'center',
-        alignItems: 'center',
-        position: 'relative',
-    },
-    cartIcon: {
-        fontSize: 24,
-    },
-    cartBadge: {
-        position: 'absolute',
-        top: 5,
-        right: 5,
-        minWidth: 20,
-        height: 20,
-        borderRadius: 10,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: 6,
-    },
-    cartBadgeText: {
-        fontSize: fonts.size.font10,
-        fontFamily: fonts.family.primaryBold,
-    },
     headerActions: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -773,6 +968,32 @@ const styles = StyleSheet.create({
         fontSize: fonts.size.font10,
         fontFamily: fonts.family.primaryBold,
     },
+    cartButton: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+        position: 'relative',
+    },
+    cartIcon: {
+        fontSize: 24,
+    },
+    cartBadge: {
+        position: 'absolute',
+        top: 5,
+        right: 5,
+        minWidth: 20,
+        height: 20,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 6,
+    },
+    cartBadgeText: {
+        fontSize: fonts.size.font10,
+        fontFamily: fonts.family.primaryBold,
+    },
     searchContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -782,7 +1003,7 @@ const styles = StyleSheet.create({
         gap: 12,
         borderWidth: 1,
         marginTop: 10,
-        marginHorizontal: 10
+        marginHorizontal: 10,
     },
     searchTouchable: {
         flex: 1,

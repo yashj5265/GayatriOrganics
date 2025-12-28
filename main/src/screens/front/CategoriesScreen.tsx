@@ -1,23 +1,35 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, RefreshControl, TextInput } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+
 import MainContainer from '../../container/MainContainer';
 import { useTheme } from '../../contexts/ThemeProvider';
-import fonts from '../../styles/fonts';
 import AppTouchableRipple from '../../components/AppTouchableRipple';
-import ApiManager from '../../managers/ApiManager';
-import StorageManager from '../../managers/StorageManager';
-import constant from '../../utilities/constant';
-import { CategoryDetailScreenProps } from './CategoryDetailScreen';
 import EmptyData, { EmptyDataType } from '../../components/EmptyData';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CategoryCard } from '../../components/listItems';
-import { useVoiceSearch } from '../../hooks/useVoiceSearch';
 import VoiceSearchButton from '../../components/VoiceSearchButton';
 import VoiceSearchOverlay from '../../popups/VoiceSearchOverlay';
+import { useVoiceSearch } from '../../hooks/useVoiceSearch';
+import ApiManager from '../../managers/ApiManager';
+import StorageManager from '../../managers/StorageManager';
+import fonts from '../../styles/fonts';
+import constant from '../../utilities/constant';
+import { CategoryDetailScreenProps } from './CategoryDetailScreen';
 
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+const GRID_COLUMNS = 2;
+const VOICE_SEARCH_LANGUAGE = 'en-US';
+const VOICE_SEARCH_DISPLAY_LANGUAGE = 'English (United States)';
+const SEARCH_INPUT_FOCUS_DELAY = 100;
+
+// ============================================================================
+// TYPES
+// ============================================================================
 interface CategoriesScreenProps {
     navigation: NativeStackNavigationProp<any>;
 }
@@ -32,18 +44,219 @@ export interface Category {
     updated_at: string;
 }
 
+interface CategoriesHeaderProps {
+    categoryCount: number;
+    searchQuery: string;
+    isListening: boolean;
+    isVoiceAvailable: boolean;
+    onSearchChange: (query: string) => void;
+    onVoicePress: () => void;
+    onClearSearch: () => void;
+    searchInputRef: React.RefObject<TextInput>;
+}
 
+interface CategoriesGridProps {
+    categories: Category[];
+    refreshing: boolean;
+    onRefresh: () => void;
+    onCategoryPress: (category: Category) => void;
+    contentStyle: any;
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+const filterCategories = (categories: Category[], query: string): Category[] => {
+    if (!query.trim()) return categories;
+
+    const lowerQuery = query.toLowerCase();
+    return categories.filter(
+        (category) =>
+            category.name.toLowerCase().includes(lowerQuery) ||
+            category.description.toLowerCase().includes(lowerQuery)
+    );
+};
+
+const getCategoryWord = (count: number): string => {
+    return count === 1 ? 'category' : 'categories';
+};
+
+const validateCategory = (category: Category): boolean => {
+    return !!(category && category.id);
+};
+
+// ============================================================================
+// SUB COMPONENTS
+// ============================================================================
+const SearchBar = React.memo(({
+    searchQuery,
+    isListening,
+    isVoiceAvailable,
+    onSearchChange,
+    onVoicePress,
+    onClearSearch,
+    searchInputRef,
+}: {
+    searchQuery: string;
+    isListening: boolean;
+    isVoiceAvailable: boolean;
+    onSearchChange: (query: string) => void;
+    onVoicePress: () => void;
+    onClearSearch: () => void;
+    searchInputRef: React.RefObject<TextInput>;
+}) => {
+    const colors = useTheme();
+
+    return (
+        <View style={[styles.searchContainer, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+            <Icon name="magnify" size={20} color={colors.white} />
+            <TextInput
+                ref={searchInputRef}
+                style={[styles.searchInput, { color: colors.white }]}
+                placeholder="Search categories..."
+                placeholderTextColor="rgba(255,255,255,0.7)"
+                value={searchQuery}
+                onChangeText={onSearchChange}
+            />
+            <VoiceSearchButton
+                isListening={isListening}
+                isAvailable={isVoiceAvailable}
+                onPress={onVoicePress}
+                colors={colors}
+                size={20}
+                showLabel={true}
+            />
+            {searchQuery.length > 0 && (
+                <AppTouchableRipple onPress={onClearSearch}>
+                    <Icon name="close-circle" size={20} color={colors.white} />
+                </AppTouchableRipple>
+            )}
+        </View>
+    );
+});
+
+const CategoriesHeader = React.memo(({
+    categoryCount,
+    searchQuery,
+    isListening,
+    isVoiceAvailable,
+    onSearchChange,
+    onVoicePress,
+    onClearSearch,
+    searchInputRef,
+}: CategoriesHeaderProps) => {
+    const colors = useTheme();
+
+    return (
+        <View style={[styles.header, { backgroundColor: colors.themePrimary }]}>
+            <View style={styles.headerTop}>
+                <View>
+                    <Text style={[styles.headerTitle, { color: colors.white }]}>
+                        Categories
+                    </Text>
+                    <Text style={[styles.headerSubtitle, { color: colors.white }]}>
+                        {categoryCount} {getCategoryWord(categoryCount)} available
+                    </Text>
+                </View>
+            </View>
+
+            <SearchBar
+                searchQuery={searchQuery}
+                isListening={isListening}
+                isVoiceAvailable={isVoiceAvailable}
+                onSearchChange={onSearchChange}
+                onVoicePress={onVoicePress}
+                onClearSearch={onClearSearch}
+                searchInputRef={searchInputRef}
+            />
+        </View>
+    );
+});
+
+const EmptyState = React.memo(({ searchQuery }: { searchQuery: string }) => (
+    <EmptyData
+        type={EmptyDataType.NO_RECORDS}
+        title={searchQuery ? 'No Categories Found' : 'No Categories Available'}
+        description={searchQuery ? 'Try adjusting your search' : 'Categories will appear here'}
+    />
+));
+
+const CategoriesGrid = React.memo(({
+    categories,
+    refreshing,
+    onRefresh,
+    onCategoryPress,
+    contentStyle,
+}: CategoriesGridProps) => {
+    const colors = useTheme();
+
+    const renderCategoryItem = useCallback(
+        ({ item }: { item: Category }) => (
+            <CategoryCard item={item} onPress={onCategoryPress} colors={colors} />
+        ),
+        [onCategoryPress, colors]
+    );
+
+    const keyExtractor = useCallback((item: Category) => item.id.toString(), []);
+
+    return (
+        <FlatList
+            data={categories}
+            renderItem={renderCategoryItem}
+            keyExtractor={keyExtractor}
+            numColumns={GRID_COLUMNS}
+            contentContainerStyle={contentStyle}
+            columnWrapperStyle={styles.gridRow}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+                <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    colors={[colors.themePrimary]}
+                    tintColor={colors.themePrimary}
+                />
+            }
+        />
+    );
+});
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
 const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ navigation }) => {
     const colors = useTheme();
     const insets = useSafeAreaInsets();
+    const searchInputRef = useRef<TextInput>(null);
 
+    // ============================================================================
+    // STATE
+    // ============================================================================
     const [categories, setCategories] = useState<Category[]>([]);
-    const [filteredCategories, setFilteredCategories] = useState<Category[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [refreshing, setRefreshing] = useState<boolean>(false);
     const [searchQuery, setSearchQuery] = useState<string>('');
-    const searchInputRef = React.useRef<TextInput>(null);
 
+    // ============================================================================
+    // COMPUTED VALUES
+    // ============================================================================
+    const filteredCategories = useMemo(
+        () => filterCategories(categories, searchQuery),
+        [categories, searchQuery]
+    );
+
+    const listContentStyle = useMemo(
+        () => ({
+            ...styles.listContainer,
+            paddingBottom: 32 + insets.bottom,
+        }),
+        [insets.bottom]
+    );
+
+    const showEmptyState = !loading && filteredCategories.length === 0;
+
+    // ============================================================================
+    // API HANDLERS
+    // ============================================================================
     const fetchCategories = useCallback(async (isRefresh = false) => {
         if (isRefresh) {
             setRefreshing(true);
@@ -59,83 +272,59 @@ const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ navigation }) => {
                 token: token || undefined,
             });
 
-            if (response?.success && response?.data && Array.isArray(response.data)) {
-                setCategories(response.data);
-                setFilteredCategories(response.data);
-            } else if (response?.data && Array.isArray(response.data)) {
-                setCategories(response.data);
-                setFilteredCategories(response.data);
-            } else {
-                setCategories([]);
-                setFilteredCategories([]);
-            }
+            // Handle different response formats
+            const categoryData =
+                response?.success && Array.isArray(response?.data)
+                    ? response.data
+                    : Array.isArray(response?.data)
+                        ? response.data
+                        : [];
+
+            setCategories(categoryData);
         } catch (error: any) {
             console.error('❌ Fetch Categories Error:', error);
             setCategories([]);
-            setFilteredCategories([]);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
     }, []);
 
-    // Load categories on screen focus
-    useFocusEffect(
-        useCallback(() => {
-            fetchCategories();
-        }, [fetchCategories])
-    );
-
-    // Memoize filtered categories based on search query
-    useEffect(() => {
-        if (searchQuery.trim() === '') {
-            setFilteredCategories(categories);
-        } else {
-            const filtered = categories.filter(
-                (category) =>
-                    category.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    category.description.toLowerCase().includes(searchQuery.toLowerCase())
-            );
-            setFilteredCategories(filtered);
-        }
-    }, [searchQuery, categories]);
-
-    const handleSearch = useCallback((query: string) => {
+    // ============================================================================
+    // SEARCH HANDLERS
+    // ============================================================================
+    const handleSearchChange = useCallback((query: string) => {
         setSearchQuery(query);
+    }, []);
+
+    const handleClearSearch = useCallback(() => {
+        setSearchQuery('');
     }, []);
 
     const handleVoiceResult = useCallback((text: string) => {
         console.log('Voice result received:', text);
         setSearchQuery(text);
-        // Optionally focus the input after voice search
+
+        // Focus the input after voice search
         setTimeout(() => {
             searchInputRef.current?.focus();
-        }, 100);
+        }, SEARCH_INPUT_FOCUS_DELAY);
     }, []);
 
     const handleVoiceError = useCallback((error: Error) => {
         console.error('Voice search error:', error);
     }, []);
 
+    // ============================================================================
+    // VOICE SEARCH HOOK
+    // ============================================================================
     const { isListening, isAvailable, startListening, stopListening } = useVoiceSearch({
         onResult: handleVoiceResult,
         onError: handleVoiceError,
-        language: 'en-US',
+        language: VOICE_SEARCH_LANGUAGE,
     });
 
-    // Stop listening when screen loses focus
-    useFocusEffect(
-        useCallback(() => {
-            return () => {
-                // Cleanup: stop listening when screen loses focus
-                if (isListening) {
-                    stopListening();
-                }
-            };
-        }, [isListening, stopListening])
-    );
-
-    const handleVoiceButtonPress = useCallback(() => {
+    const handleVoicePress = useCallback(() => {
         console.log('Voice button pressed, isListening:', isListening);
         if (isListening) {
             stopListening();
@@ -144,31 +333,54 @@ const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ navigation }) => {
         }
     }, [isListening, startListening, stopListening]);
 
+    // ============================================================================
+    // NAVIGATION HANDLERS
+    // ============================================================================
+    const handleCategoryPress = useCallback(
+        (category: Category) => {
+            if (!validateCategory(category)) {
+                console.error('❌ Invalid category data:', category);
+                return;
+            }
+
+            const propsToSend: CategoryDetailScreenProps = {
+                categoryId: category.id,
+                categoryName: category.name,
+            };
+
+            navigation.navigate(constant.routeName.categoryDetail, { params: propsToSend });
+        },
+        [navigation]
+    );
+
     const handleRefresh = useCallback(() => {
         fetchCategories(true);
     }, [fetchCategories]);
 
-    const handleCategoryPress = useCallback((category: Category) => {
-        if (!category || !category.id) {
-            console.error('❌ Invalid category data:', category);
-            return;
-        }
-        const propsToSend: CategoryDetailScreenProps = {
-            categoryId: category.id,
-            categoryName: category.name
-        };
-        navigation.navigate(constant.routeName.categoryDetail, { params: propsToSend });
-    }, [navigation]);
+    // ============================================================================
+    // EFFECTS
+    // ============================================================================
+    // Load categories on screen focus
+    useFocusEffect(
+        useCallback(() => {
+            fetchCategories();
+        }, [fetchCategories])
+    );
 
-    const renderCategoryItem = useCallback(({ item }: { item: Category }) => (
-        <CategoryCard item={item} onPress={handleCategoryPress} colors={colors} />
-    ), [handleCategoryPress, colors]);
+    // Stop voice listening when screen loses focus
+    useFocusEffect(
+        useCallback(() => {
+            return () => {
+                if (isListening) {
+                    stopListening();
+                }
+            };
+        }, [isListening, stopListening])
+    );
 
-    const listContentStyle = useMemo(() => ({
-        ...styles.listContainer,
-        paddingBottom: 32 + insets.bottom
-    }), [insets.bottom]);
-
+    // ============================================================================
+    // RENDER
+    // ============================================================================
     return (
         <MainContainer
             statusBarColor={colors.themePrimary}
@@ -177,70 +389,28 @@ const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ navigation }) => {
             showLoader={loading && !refreshing}
         >
             <View style={[styles.container, { backgroundColor: colors.backgroundPrimary }]}>
-                {/* Header */}
-                <View style={[styles.header, { backgroundColor: colors.themePrimary }]}>
-                    <View style={styles.headerTop}>
-                        <View>
-                            <Text style={[styles.headerTitle, { color: colors.white }]}>
-                                Categories
-                            </Text>
-                            <Text style={[styles.headerSubtitle, { color: colors.white }]}>
-                                {filteredCategories.length} {filteredCategories.length === 1 ? 'category' : 'categories'} available
-                            </Text>
-                        </View>
-                    </View>
+                {/* Header with Search */}
+                <CategoriesHeader
+                    categoryCount={filteredCategories.length}
+                    searchQuery={searchQuery}
+                    isListening={isListening}
+                    isVoiceAvailable={isAvailable}
+                    onSearchChange={handleSearchChange}
+                    onVoicePress={handleVoicePress}
+                    onClearSearch={handleClearSearch}
+                    searchInputRef={searchInputRef}
+                />
 
-                    {/* Search Bar */}
-                    <View style={[styles.searchContainer, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-                        <Icon name="magnify" size={20} color={colors.white} />
-                        <TextInput
-                            ref={searchInputRef}
-                            style={[styles.searchInput, { color: colors.white }]}
-                            placeholder="Search categories..."
-                            placeholderTextColor="rgba(255,255,255,0.7)"
-                            value={searchQuery}
-                            onChangeText={handleSearch}
-                        />
-                        <VoiceSearchButton
-                            isListening={isListening}
-                            isAvailable={isAvailable}
-                            onPress={handleVoiceButtonPress}
-                            colors={colors}
-                            size={20}
-                            showLabel={true}
-                        />
-                        {searchQuery.length > 0 && (
-                            <AppTouchableRipple onPress={() => handleSearch('')}>
-                                <Icon name="close-circle" size={20} color={colors.white} />
-                            </AppTouchableRipple>
-                        )}
-                    </View>
-                </View>
-
-                {/* Categories Grid */}
-                {!loading && filteredCategories.length === 0 ? (
-                    <EmptyData
-                        type={EmptyDataType.NO_RECORDS}
-                        title={searchQuery ? 'No Categories Found' : 'No Categories Available'}
-                        description={searchQuery ? 'Try adjusting your search' : 'Categories will appear here'}
-                    />
+                {/* Categories Grid or Empty State */}
+                {showEmptyState ? (
+                    <EmptyState searchQuery={searchQuery} />
                 ) : (
-                    <FlatList
-                        data={filteredCategories}
-                        renderItem={renderCategoryItem}
-                        keyExtractor={(item) => item.id.toString()}
-                        numColumns={2}
-                        contentContainerStyle={listContentStyle}
-                        columnWrapperStyle={styles.gridRow}
-                        showsVerticalScrollIndicator={false}
-                        refreshControl={
-                            <RefreshControl
-                                refreshing={refreshing}
-                                onRefresh={handleRefresh}
-                                colors={[colors.themePrimary]}
-                                tintColor={colors.themePrimary}
-                            />
-                        }
+                    <CategoriesGrid
+                        categories={filteredCategories}
+                        refreshing={refreshing}
+                        onRefresh={handleRefresh}
+                        onCategoryPress={handleCategoryPress}
+                        contentStyle={listContentStyle}
                     />
                 )}
             </View>
@@ -249,7 +419,7 @@ const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ navigation }) => {
             <VoiceSearchOverlay
                 visible={isListening}
                 isListening={isListening}
-                language="English (United States)"
+                language={VOICE_SEARCH_DISPLAY_LANGUAGE}
                 colors={colors}
                 onClose={stopListening}
             />
@@ -259,6 +429,9 @@ const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ navigation }) => {
 
 export default CategoriesScreen;
 
+// ============================================================================
+// STYLES
+// ============================================================================
 const styles = StyleSheet.create({
     container: {
         flex: 1,

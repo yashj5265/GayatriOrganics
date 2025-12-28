@@ -1,60 +1,523 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, memo, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, Image } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+
 import MainContainer from '../../container/MainContainer';
 import { useTheme } from '../../contexts/ThemeProvider';
-import fonts from '../../styles/fonts';
-import AppTouchableRipple from '../../components/AppTouchableRipple';
 import { useCart } from '../../contexts/CardContext';
+import AppTouchableRipple from '../../components/AppTouchableRipple';
 import EmptyData, { EmptyDataType } from '../../components/EmptyData';
+import fonts from '../../styles/fonts';
 import constant from '../../utilities/constant';
 import { getImageUrl } from '../../components/listItems/utils';
 
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+const DELIVERY_CHARGE = 30;
+const FREE_DELIVERY_THRESHOLD = 500;
+const ESTIMATED_DELIVERY_TIME = '24-48 hours';
+const CURRENT_SAVINGS = 0;
+
+// ============================================================================
+// TYPES
+// ============================================================================
 interface CartScreenProps {
     navigation: NativeStackNavigationProp<any>;
 }
 
-const DELIVERY_CHARGE = 30;
+interface CartItemType {
+    id: number;
+    name: string;
+    price: number;
+    quantity: number;
+    unit: string;
+    image?: string;
+}
 
+interface QuantityControlsProps {
+    quantity: number;
+    isProcessing: boolean;
+    onIncrease: () => void;
+    onDecrease: () => void;
+}
+
+interface CartItemCardProps {
+    item: CartItemType;
+    isProcessing: boolean;
+    hasImageError: boolean;
+    onQuantityChange: (change: number) => void;
+    onRemove: () => void;
+    onImageError: () => void;
+}
+
+interface BillDetailsProps {
+    cartCount: number;
+    cartTotal: number;
+    deliveryCharge: number;
+    total: number;
+    savings: number;
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+const formatCurrency = (amount: number): string => {
+    return `₹${amount.toFixed(2)}`;
+};
+
+const getItemWord = (count: number): string => {
+    return count === 1 ? 'item' : 'items';
+};
+
+// ============================================================================
+// SUB COMPONENTS
+// ============================================================================
+const CartHeader = memo(({
+    cartCount,
+    hasItems,
+    onClearCart,
+}: {
+    cartCount: number;
+    hasItems: boolean;
+    onClearCart: () => void;
+}) => {
+    const colors = useTheme();
+
+    return (
+        <View style={[styles.header, { backgroundColor: colors.themePrimary }]}>
+            <View style={styles.headerContent}>
+                <View>
+                    <Text style={[styles.headerTitle, { color: colors.white }]}>
+                        My Cart
+                    </Text>
+                    <Text style={[styles.headerSubtitle, { color: colors.white }]}>
+                        {cartCount} {getItemWord(cartCount)}
+                    </Text>
+                </View>
+
+                {hasItems && (
+                    <AppTouchableRipple
+                        style={[styles.clearButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+                        onPress={onClearCart}
+                    >
+                        <Icon name="delete-outline" size={20} color={colors.white} />
+                        <Text style={[styles.clearButtonText, { color: colors.white }]}>
+                            Clear
+                        </Text>
+                    </AppTouchableRipple>
+                )}
+            </View>
+        </View>
+    );
+});
+
+const EmptyCartView = memo(({ onShopNow }: { onShopNow: () => void }) => {
+    const colors = useTheme();
+
+    return (
+        <>
+            <View style={[styles.header, { backgroundColor: colors.themePrimary }]}>
+                <Text style={[styles.headerTitle, { color: colors.white }]}>
+                    My Cart
+                </Text>
+                <Text style={[styles.headerSubtitle, { color: colors.white }]}>
+                    0 items
+                </Text>
+            </View>
+
+            <View style={styles.emptyContainer}>
+                <EmptyData
+                    type={EmptyDataType.NO_RECORDS}
+                    title="Your Cart is Empty"
+                    description="Add products to your cart to see them here"
+                />
+
+                <AppTouchableRipple
+                    style={[styles.shopNowButton, { backgroundColor: colors.themePrimary }]}
+                    onPress={onShopNow}
+                >
+                    <Icon name="shopping" size={20} color={colors.white} />
+                    <Text style={[styles.shopNowText, { color: colors.white }]}>
+                        Start Shopping
+                    </Text>
+                </AppTouchableRipple>
+            </View>
+        </>
+    );
+});
+
+const QuantityControls = memo(({
+    quantity,
+    isProcessing,
+    onIncrease,
+    onDecrease,
+}: QuantityControlsProps) => {
+    const colors = useTheme();
+
+    return (
+        <View style={styles.quantityContainer}>
+            <AppTouchableRipple
+                style={[
+                    styles.quantityButton,
+                    {
+                        backgroundColor: colors.themePrimaryLight,
+                        opacity: isProcessing ? 0.5 : 1,
+                    },
+                ]}
+                onPress={onDecrease}
+                disabled={isProcessing}
+            >
+                <Icon name="minus" size={16} color={colors.themePrimary} />
+            </AppTouchableRipple>
+
+            <Text style={[styles.quantityText, { color: colors.textPrimary }]}>
+                {quantity}
+            </Text>
+
+            <AppTouchableRipple
+                style={[
+                    styles.quantityButton,
+                    {
+                        backgroundColor: colors.themePrimaryLight,
+                        opacity: isProcessing ? 0.5 : 1,
+                    },
+                ]}
+                onPress={onIncrease}
+                disabled={isProcessing}
+            >
+                <Icon name="plus" size={16} color={colors.themePrimary} />
+            </AppTouchableRipple>
+        </View>
+    );
+});
+
+const CartItemCard = memo(({
+    item,
+    isProcessing,
+    hasImageError,
+    onQuantityChange,
+    onRemove,
+    onImageError,
+}: CartItemCardProps) => {
+    const colors = useTheme();
+    const itemTotal = item.price * item.quantity;
+
+    return (
+        <View
+            style={[
+                styles.cartItem,
+                {
+                    backgroundColor: colors.backgroundSecondary,
+                    opacity: isProcessing ? 0.7 : 1,
+                },
+            ]}
+        >
+            {/* Item Image */}
+            <View style={[styles.itemImageContainer, { backgroundColor: colors.themePrimaryLight }]}>
+                {item.image && !hasImageError ? (
+                    <Image
+                        source={{ uri: getImageUrl(item.image) }}
+                        style={styles.itemImage}
+                        resizeMode="cover"
+                        onError={onImageError}
+                    />
+                ) : (
+                    <Icon name="image-off" size={32} color={colors.themePrimary} />
+                )}
+            </View>
+
+            {/* Item Details */}
+            <View style={styles.itemDetails}>
+                <Text style={[styles.itemName, { color: colors.textPrimary }]}>
+                    {item.name}
+                </Text>
+                <Text style={[styles.itemUnit, { color: colors.textLabel }]}>
+                    ₹{item.price} per {item.unit}
+                </Text>
+
+                <QuantityControls
+                    quantity={item.quantity}
+                    isProcessing={isProcessing}
+                    onIncrease={() => onQuantityChange(1)}
+                    onDecrease={() => onQuantityChange(-1)}
+                />
+            </View>
+
+            {/* Item Right - Price & Remove */}
+            <View style={styles.itemRight}>
+                <Text style={[styles.itemTotal, { color: colors.themePrimary }]}>
+                    ₹{itemTotal}
+                </Text>
+                <AppTouchableRipple onPress={onRemove} style={styles.removeButton}>
+                    <Icon name="delete-outline" size={22} color="#FF5252" />
+                </AppTouchableRipple>
+            </View>
+        </View>
+    );
+});
+
+const BillRow = memo(({
+    label,
+    value,
+    subtitle,
+    isTotal = false,
+}: {
+    label: string;
+    value: string;
+    subtitle?: string;
+    isTotal?: boolean;
+}) => {
+    const colors = useTheme();
+
+    return (
+        <View style={styles.billRow}>
+            <View style={styles.billLabelContainer}>
+                <Text
+                    style={[
+                        isTotal ? styles.totalLabel : styles.billLabel,
+                        { color: isTotal ? colors.textPrimary : colors.textDescription },
+                    ]}
+                >
+                    {label}
+                </Text>
+                {subtitle && (
+                    <Text style={[styles.deliveryNote, { color: colors.textLabel }]}>
+                        {subtitle}
+                    </Text>
+                )}
+            </View>
+            <Text
+                style={[
+                    isTotal ? styles.totalValue : styles.billValue,
+                    { color: isTotal ? colors.themePrimary : colors.textPrimary },
+                ]}
+            >
+                {value}
+            </Text>
+        </View>
+    );
+});
+
+const BillDetails = memo(({
+    cartCount,
+    cartTotal,
+    deliveryCharge,
+    total,
+    savings,
+}: BillDetailsProps) => {
+    const colors = useTheme();
+
+    return (
+        <View style={[styles.billCard, { backgroundColor: colors.backgroundSecondary }]}>
+            {/* Header */}
+            <View style={styles.billHeader}>
+                <Icon name="receipt" size={20} color={colors.themePrimary} />
+                <Text style={[styles.billTitle, { color: colors.textPrimary }]}>
+                    Bill Details
+                </Text>
+            </View>
+
+            {/* Item Total */}
+            <BillRow
+                label={`Item Total (${cartCount} ${getItemWord(cartCount)})`}
+                value={formatCurrency(cartTotal)}
+            />
+
+            {/* Delivery Charge */}
+            <BillRow
+                label="Delivery Charge"
+                value={deliveryCharge > 0 ? formatCurrency(deliveryCharge) : 'FREE'}
+                subtitle={deliveryCharge > 0 ? 'Standard delivery' : undefined}
+            />
+
+            {/* Divider */}
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+            {/* Total */}
+            <BillRow
+                label="To Pay"
+                value={formatCurrency(total)}
+                isTotal
+            />
+
+            {/* Savings Badge */}
+            <View style={[styles.savingsBadge, { backgroundColor: '#E8F5E9' }]}>
+                <Icon name="tag" size={16} color="#4CAF50" />
+                <Text style={styles.savingsText}>
+                    You're saving ₹{savings} on this order
+                </Text>
+            </View>
+        </View>
+    );
+});
+
+const DeliveryInfo = memo(() => {
+    const colors = useTheme();
+
+    return (
+        <View style={[styles.infoCard, { backgroundColor: colors.backgroundSecondary }]}>
+            <Icon name="information" size={20} color={colors.themePrimary} />
+            <View style={styles.infoContent}>
+                <Text style={[styles.infoTitle, { color: colors.textPrimary }]}>
+                    Delivery Information
+                </Text>
+                <Text style={[styles.infoText, { color: colors.textDescription }]}>
+                    Your order will be delivered within {ESTIMATED_DELIVERY_TIME}. Free delivery on orders above ₹{FREE_DELIVERY_THRESHOLD}.
+                </Text>
+            </View>
+        </View>
+    );
+});
+
+const CheckoutFooter = memo(({
+    total,
+    onCheckout,
+}: {
+    total: number;
+    onCheckout: () => void;
+}) => {
+    const colors = useTheme();
+
+    return (
+        <View
+            style={[
+                styles.footer,
+                {
+                    backgroundColor: colors.backgroundPrimary,
+                    borderTopColor: colors.border,
+                },
+            ]}
+        >
+            <View>
+                <Text style={[styles.footerLabel, { color: colors.textLabel }]}>
+                    Total Amount
+                </Text>
+                <Text style={[styles.footerTotal, { color: colors.themePrimary }]}>
+                    {formatCurrency(total)}
+                </Text>
+                <Text style={[styles.footerSubtext, { color: colors.textLabel }]}>
+                    Including all taxes
+                </Text>
+            </View>
+
+            <AppTouchableRipple
+                style={[styles.checkoutButton, { backgroundColor: colors.themePrimary }]}
+                onPress={onCheckout}
+            >
+                <Text style={[styles.checkoutText, { color: colors.white }]}>
+                    Proceed to Checkout
+                </Text>
+                <Icon name="arrow-right" size={20} color={colors.white} />
+            </AppTouchableRipple>
+        </View>
+    );
+});
+
+const CartItemsList = memo(({
+    cartItems,
+    processingItemId,
+    imageErrors,
+    onQuantityChange,
+    onRemoveItem,
+    onImageError,
+}: {
+    cartItems: CartItemType[];
+    processingItemId: number | null;
+    imageErrors: Set<number>;
+    onQuantityChange: (itemId: number, change: number) => void;
+    onRemoveItem: (itemId: number) => void;
+    onImageError: (itemId: number) => void;
+}) => {
+    const colors = useTheme();
+
+    return (
+        <View style={styles.itemsSection}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                Cart Items ({cartItems.length})
+            </Text>
+
+            {cartItems.map((item) => (
+                <CartItemCard
+                    key={item.id}
+                    item={item}
+                    isProcessing={processingItemId === item.id}
+                    hasImageError={imageErrors.has(item.id)}
+                    onQuantityChange={(change) => onQuantityChange(item.id, change)}
+                    onRemove={() => onRemoveItem(item.id)}
+                    onImageError={() => onImageError(item.id)}
+                />
+            ))}
+        </View>
+    );
+});
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
 const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
     const colors = useTheme();
     const { cartItems, cartCount, cartTotal, updateQuantity, removeFromCart, clearCart } = useCart();
     const [processingItemId, setProcessingItemId] = useState<number | null>(null);
     const [imageErrors, setImageErrors] = useState<Set<number>>(new Set());
 
-    const deliveryCharge = cartItems.length > 0 ? DELIVERY_CHARGE : 0;
-    const total = cartTotal + deliveryCharge;
+    // ============================================================================
+    // COMPUTED VALUES
+    // ============================================================================
+    const deliveryCharge = useMemo(
+        () => (cartItems.length > 0 ? DELIVERY_CHARGE : 0),
+        [cartItems.length]
+    );
 
-    const handleQuantityChange = useCallback((itemId: number, currentQuantity: number, change: number) => {
-        const newQuantity = currentQuantity + change;
+    const total = useMemo(
+        () => cartTotal + deliveryCharge,
+        [cartTotal, deliveryCharge]
+    );
 
-        if (newQuantity <= 0) {
-            handleRemoveItem(itemId);
-            return;
-        }
+    const hasItems = cartItems.length > 0;
 
-        setProcessingItemId(itemId);
-        updateQuantity(itemId, newQuantity);
-        setTimeout(() => setProcessingItemId(null), 300);
-    }, [updateQuantity]);
+    // ============================================================================
+    // HANDLERS
+    // ============================================================================
+    const handleQuantityChange = useCallback(
+        (itemId: number, change: number) => {
+            const item = cartItems.find((i) => i.id === itemId);
+            if (!item) return;
 
-    const handleRemoveItem = useCallback((itemId: number) => {
-        const item = cartItems.find(i => i.id === itemId);
+            const newQuantity = item.quantity + change;
 
-        Alert.alert(
-            'Remove Item',
-            `Are you sure you want to remove ${item?.name} from your cart?`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Remove',
-                    style: 'destructive',
-                    onPress: () => removeFromCart(itemId)
-                }
-            ]
-        );
-    }, [cartItems, removeFromCart]);
+            if (newQuantity <= 0) {
+                handleRemoveItem(itemId);
+                return;
+            }
+
+            setProcessingItemId(itemId);
+            updateQuantity(itemId, newQuantity);
+            setTimeout(() => setProcessingItemId(null), 300);
+        },
+        [cartItems, updateQuantity]
+    );
+
+    const handleRemoveItem = useCallback(
+        (itemId: number) => {
+            const item = cartItems.find((i) => i.id === itemId);
+
+            Alert.alert(
+                'Remove Item',
+                `Are you sure you want to remove ${item?.name} from your cart?`,
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Remove',
+                        style: 'destructive',
+                        onPress: () => removeFromCart(itemId),
+                    },
+                ]
+            );
+        },
+        [cartItems, removeFromCart]
+    );
 
     const handleClearCart = useCallback(() => {
         Alert.alert(
@@ -65,23 +528,35 @@ const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
                 {
                     text: 'Clear All',
                     style: 'destructive',
-                    onPress: clearCart
-                }
+                    onPress: clearCart,
+                },
             ]
         );
     }, [clearCart]);
 
     const handleCheckout = useCallback(() => {
-        if (cartItems.length === 0) {
+        if (!hasItems) {
             Alert.alert('Empty Cart', 'Please add items to your cart before checkout');
             return;
         }
 
         navigation.navigate(constant.routeName.checkout);
-    }, [cartItems.length, navigation]);
+    }, [hasItems, navigation]);
 
-    // Empty Cart State
-    if (cartItems.length === 0) {
+    const handleShopNow = useCallback(() => {
+        navigation.navigate(constant.routeName.mainTabs, {
+            screen: constant.routeName.home,
+        });
+    }, [navigation]);
+
+    const handleImageError = useCallback((itemId: number) => {
+        setImageErrors((prev) => new Set(prev).add(itemId));
+    }, []);
+
+    // ============================================================================
+    // RENDER - EMPTY STATE
+    // ============================================================================
+    if (!hasItems) {
         return (
             <MainContainer
                 statusBarColor={colors.themePrimary}
@@ -89,38 +564,15 @@ const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
                 isInternetRequired={false}
             >
                 <View style={[styles.container, { backgroundColor: colors.backgroundPrimary }]}>
-                    {/* Header */}
-                    <View style={[styles.header, { backgroundColor: colors.themePrimary }]}>
-                        <Text style={[styles.headerTitle, { color: colors.white }]}>
-                            My Cart
-                        </Text>
-                        <Text style={[styles.headerSubtitle, { color: colors.white }]}>
-                            0 items
-                        </Text>
-                    </View>
-
-                    <View style={styles.emptyContainer}>
-                        <EmptyData
-                            type={EmptyDataType.NO_RECORDS}
-                            title="Your Cart is Empty"
-                            description="Add products to your cart to see them here"
-                        />
-
-                        <AppTouchableRipple
-                            style={[styles.shopNowButton, { backgroundColor: colors.themePrimary }]}
-                            onPress={() => navigation.navigate(constant.routeName.mainTabs, { screen: constant.routeName.home })}
-                        >
-                            <Icon name="shopping" size={20} color={colors.white} />
-                            <Text style={[styles.shopNowText, { color: colors.white }]}>
-                                Start Shopping
-                            </Text>
-                        </AppTouchableRipple>
-                    </View>
+                    <EmptyCartView onShopNow={handleShopNow} />
                 </View>
             </MainContainer>
         );
     }
 
+    // ============================================================================
+    // RENDER - CART WITH ITEMS
+    // ============================================================================
     return (
         <MainContainer
             statusBarColor={colors.themePrimary}
@@ -129,258 +581,53 @@ const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
         >
             <View style={[styles.container, { backgroundColor: colors.backgroundPrimary }]}>
                 {/* Header */}
-                <View style={[styles.header, { backgroundColor: colors.themePrimary }]}>
-                    <View style={styles.headerContent}>
-                        <View>
-                            <Text style={[styles.headerTitle, { color: colors.white }]}>
-                                My Cart
-                            </Text>
-                            <Text style={[styles.headerSubtitle, { color: colors.white }]}>
-                                {cartCount} {cartCount === 1 ? 'item' : 'items'}
-                            </Text>
-                        </View>
+                <CartHeader
+                    cartCount={cartCount}
+                    hasItems={hasItems}
+                    onClearCart={handleClearCart}
+                />
 
-                        {cartItems.length > 0 && (
-                            <AppTouchableRipple
-                                style={[styles.clearButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
-                                onPress={handleClearCart}
-                            >
-                                <Icon name="delete-outline" size={20} color={colors.white} />
-                                <Text style={[styles.clearButtonText, { color: colors.white }]}>
-                                    Clear
-                                </Text>
-                            </AppTouchableRipple>
-                        )}
-                    </View>
-                </View>
-
-                {/* Cart Items */}
+                {/* Cart Content */}
                 <ScrollView
                     style={styles.content}
                     contentContainerStyle={styles.contentContainer}
                     showsVerticalScrollIndicator={false}
                 >
                     {/* Cart Items List */}
-                    <View style={styles.itemsSection}>
-                        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-                            Cart Items ({cartItems.length})
-                        </Text>
-
-                        {cartItems.map((item) => {
-                            const itemTotal = item.price * item.quantity;
-                            const isProcessing = processingItemId === item.id;
-                            const hasImageError = imageErrors.has(item.id);
-
-                            return (
-                                <View
-                                    key={item.id}
-                                    style={[
-                                        styles.cartItem,
-                                        {
-                                            backgroundColor: colors.backgroundSecondary,
-                                            opacity: isProcessing ? 0.7 : 1
-                                        },
-                                    ]}
-                                >
-                                    {/* Item Image */}
-                                    <View style={[styles.itemImageContainer, { backgroundColor: colors.themePrimaryLight }]}>
-                                        {item.image && !hasImageError ? (
-                                            <Image
-                                                source={{ uri: getImageUrl(item.image) }}
-                                                style={styles.itemImage}
-                                                resizeMode="cover"
-                                                onError={() => {
-                                                    setImageErrors(prev => new Set(prev).add(item.id));
-                                                }}
-                                            />
-                                        ) : (
-                                            <Icon name="image-off" size={32} color={colors.themePrimary} />
-                                        )}
-                                    </View>
-
-                                    {/* Item Details */}
-                                    <View style={styles.itemDetails}>
-                                        <Text style={[styles.itemName, { color: colors.textPrimary }]}>
-                                            {item.name}
-                                        </Text>
-                                        <Text style={[styles.itemUnit, { color: colors.textLabel }]}>
-                                            ₹{item.price} per {item.unit}
-                                        </Text>
-
-                                        {/* Quantity Controls */}
-                                        <View style={styles.quantityContainer}>
-                                            <AppTouchableRipple
-                                                style={[
-                                                    styles.quantityButton,
-                                                    {
-                                                        backgroundColor: colors.themePrimaryLight,
-                                                        opacity: isProcessing ? 0.5 : 1
-                                                    },
-                                                ]}
-                                                onPress={() => handleQuantityChange(item.id, item.quantity, -1)}
-                                                disabled={isProcessing}
-                                            >
-                                                <Icon
-                                                    name="minus"
-                                                    size={16}
-                                                    color={colors.themePrimary}
-                                                />
-                                            </AppTouchableRipple>
-
-                                            <Text
-                                                style={[styles.quantityText, { color: colors.textPrimary }]}
-                                            >
-                                                {item.quantity}
-                                            </Text>
-
-                                            <AppTouchableRipple
-                                                style={[
-                                                    styles.quantityButton,
-                                                    {
-                                                        backgroundColor: colors.themePrimaryLight,
-                                                        opacity: isProcessing ? 0.5 : 1
-                                                    },
-                                                ]}
-                                                onPress={() => handleQuantityChange(item.id, item.quantity, 1)}
-                                                disabled={isProcessing}
-                                            >
-                                                <Icon
-                                                    name="plus"
-                                                    size={16}
-                                                    color={colors.themePrimary}
-                                                />
-                                            </AppTouchableRipple>
-                                        </View>
-                                    </View>
-
-                                    {/* Item Right - Price & Remove */}
-                                    <View style={styles.itemRight}>
-                                        <Text style={[styles.itemTotal, { color: colors.themePrimary }]}>
-                                            ₹{itemTotal}
-                                        </Text>
-                                        <AppTouchableRipple
-                                            onPress={() => handleRemoveItem(item.id)}
-                                            style={styles.removeButton}
-                                        >
-                                            <Icon name="delete-outline" size={22} color="#FF5252" />
-                                        </AppTouchableRipple>
-                                    </View>
-                                </View>
-                            );
-                        })}
-                    </View>
+                    <CartItemsList
+                        cartItems={cartItems}
+                        processingItemId={processingItemId}
+                        imageErrors={imageErrors}
+                        onQuantityChange={handleQuantityChange}
+                        onRemoveItem={handleRemoveItem}
+                        onImageError={handleImageError}
+                    />
 
                     {/* Bill Details */}
-                    <View
-                        style={[
-                            styles.billCard,
-                            { backgroundColor: colors.backgroundSecondary },
-                        ]}
-                    >
-                        <View style={styles.billHeader}>
-                            <Icon name="receipt" size={20} color={colors.themePrimary} />
-                            <Text style={[styles.billTitle, { color: colors.textPrimary }]}>
-                                Bill Details
-                            </Text>
-                        </View>
-
-                        <View style={styles.billRow}>
-                            <Text style={[styles.billLabel, { color: colors.textDescription }]}>
-                                Item Total ({cartCount} {cartCount === 1 ? 'item' : 'items'})
-                            </Text>
-                            <Text style={[styles.billValue, { color: colors.textPrimary }]}>
-                                ₹{cartTotal.toFixed(2)}
-                            </Text>
-                        </View>
-
-                        <View style={styles.billRow}>
-                            <View style={styles.billLabelContainer}>
-                                <Text style={[styles.billLabel, { color: colors.textDescription }]}>
-                                    Delivery Charge
-                                </Text>
-                                {deliveryCharge > 0 && (
-                                    <Text style={[styles.deliveryNote, { color: colors.textLabel }]}>
-                                        Standard delivery
-                                    </Text>
-                                )}
-                            </View>
-                            <Text style={[styles.billValue, { color: colors.textPrimary }]}>
-                                {deliveryCharge > 0 ? `₹${deliveryCharge}` : 'FREE'}
-                            </Text>
-                        </View>
-
-                        <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-                        <View style={styles.billRow}>
-                            <Text style={[styles.totalLabel, { color: colors.textPrimary }]}>
-                                To Pay
-                            </Text>
-                            <Text style={[styles.totalValue, { color: colors.themePrimary }]}>
-                                ₹{total.toFixed(2)}
-                            </Text>
-                        </View>
-
-                        {/* Savings Badge */}
-                        <View style={[styles.savingsBadge, { backgroundColor: '#E8F5E9' }]}>
-                            <Icon name="tag" size={16} color="#4CAF50" />
-                            <Text style={styles.savingsText}>
-                                You're saving ₹0 on this order
-                            </Text>
-                        </View>
-                    </View>
+                    <BillDetails
+                        cartCount={cartCount}
+                        cartTotal={cartTotal}
+                        deliveryCharge={deliveryCharge}
+                        total={total}
+                        savings={CURRENT_SAVINGS}
+                    />
 
                     {/* Delivery Info */}
-                    <View style={[styles.infoCard, { backgroundColor: colors.backgroundSecondary }]}>
-                        <Icon name="information" size={20} color={colors.themePrimary} />
-                        <View style={styles.infoContent}>
-                            <Text style={[styles.infoTitle, { color: colors.textPrimary }]}>
-                                Delivery Information
-                            </Text>
-                            <Text style={[styles.infoText, { color: colors.textDescription }]}>
-                                Your order will be delivered within 24-48 hours. Free delivery on orders above ₹500.
-                            </Text>
-                        </View>
-                    </View>
+                    <DeliveryInfo />
                 </ScrollView>
 
-                {/* Checkout Button */}
-                <View
-                    style={[
-                        styles.footer,
-                        {
-                            backgroundColor: colors.backgroundPrimary,
-                            borderTopColor: colors.border,
-                        },
-                    ]}
-                >
-                    <View>
-                        <Text style={[styles.footerLabel, { color: colors.textLabel }]}>
-                            Total Amount
-                        </Text>
-                        <Text style={[styles.footerTotal, { color: colors.themePrimary }]}>
-                            ₹{total.toFixed(2)}
-                        </Text>
-                        <Text style={[styles.footerSubtext, { color: colors.textLabel }]}>
-                            Including all taxes
-                        </Text>
-                    </View>
-                    <AppTouchableRipple
-                        style={[styles.checkoutButton, { backgroundColor: colors.themePrimary }]}
-                        onPress={handleCheckout}
-                    >
-                        <Text style={[styles.checkoutText, { color: colors.white }]}>
-                            Proceed to Checkout
-                        </Text>
-                        <Icon name="arrow-right" size={20} color={colors.white} />
-                    </AppTouchableRipple>
-                </View>
+                {/* Checkout Footer */}
+                <CheckoutFooter total={total} onCheckout={handleCheckout} />
             </View>
         </MainContainer>
     );
 };
 
-export default CartScreen;
+export default memo(CartScreen);
 
+// ============================================================================
+// STYLES
+// ============================================================================
 const styles = StyleSheet.create({
     container: {
         flex: 1,

@@ -1,19 +1,57 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useCallback, useEffect, memo } from 'react';
+import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+
 import MainContainer from '../../container/MainContainer';
 import { useTheme } from '../../contexts/ThemeProvider';
-import fonts from '../../styles/fonts';
 import AppTouchableRipple from '../../components/AppTouchableRipple';
 import ApiManager from '../../managers/ApiManager';
 import StorageManager from '../../managers/StorageManager';
+import fonts from '../../styles/fonts';
 import constant from '../../utilities/constant';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+const ORDER_STATUS = {
+    PENDING: ['pending', 'new'],
+    CONFIRMED: ['confirmed', 'accepted'],
+    PACKED: ['packed', 'ready'],
+    ASSIGNED: ['assigned'],
+    PICKED: ['picked', 'picked_up'],
+    DELIVERING: ['delivering', 'out_for_delivery'],
+    DELIVERED: ['delivered', 'completed'],
+    CANCELLED: ['cancelled', 'rejected'],
+} as const;
+
+const STATUS_CONFIG = {
+    pending: { label: 'Pending', color: '#ff9800', icon: 'clock-outline' },
+    confirmed: { label: 'Confirmed', color: '#2196f3', icon: 'check-circle-outline' },
+    packed: { label: 'Packed', color: '#9c27b0', icon: 'package-variant' },
+    assigned: { label: 'Assigned', color: '#ff5722', icon: 'account-check' },
+    picked: { label: 'Picked Up', color: '#00bcd4', icon: 'truck-delivery' },
+    delivering: { label: 'Out for Delivery', color: '#673ab7', icon: 'truck' },
+    delivered: { label: 'Delivered', color: '#4caf50', icon: 'check-circle' },
+    cancelled: { label: 'Cancelled', color: '#f44336', icon: 'close-circle' },
+} as const;
+
+// ============================================================================
+// TYPES
+// ============================================================================
 interface OrderDetailScreenProps {
     navigation: NativeStackNavigationProp<any>;
     route: RouteProp<any, any>;
+}
+
+interface OrderItem {
+    product?: {
+        name?: string;
+    };
+    name?: string;
+    quantity?: number;
+    price?: number;
 }
 
 interface Order {
@@ -22,7 +60,7 @@ interface Order {
     status: string;
     total_amount?: number;
     amount?: number;
-    items?: any[];
+    items?: OrderItem[];
     items_count?: number;
     created_at?: string;
     confirmation_code?: string;
@@ -36,12 +74,353 @@ interface Order {
     customer_phone?: string;
 }
 
+interface StatusInfo {
+    label: string;
+    color: string;
+    icon: string;
+}
+
+interface InfoCardProps {
+    icon: string;
+    title: string;
+    children: React.ReactNode;
+}
+
+interface InfoRowProps {
+    label: string;
+    value: string | number;
+    isAmount?: boolean;
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+const getStatusInfo = (status: string, fallbackColor: string): StatusInfo => {
+    const statusLower = status?.toLowerCase() || '';
+
+    // Check each status category
+    for (const [key, statusList] of Object.entries(ORDER_STATUS)) {
+        if (statusList.includes(statusLower as any)) {
+            const configKey = key.toLowerCase() as keyof typeof STATUS_CONFIG;
+            return STATUS_CONFIG[configKey] || { label: status, color: fallbackColor, icon: 'help-circle' };
+        }
+    }
+
+    return { label: status || 'Unknown', color: fallbackColor, icon: 'help-circle' };
+};
+
+const formatDate = (dateString?: string): string => {
+    if (!dateString) return 'N/A';
+
+    try {
+        const date = new Date(dateString);
+        return date.toLocaleString('en-IN', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    } catch {
+        return dateString;
+    }
+};
+
+const formatCurrency = (amount: number): string => {
+    return `₹${amount.toFixed(2)}`;
+};
+
+const getOrderNumber = (order: Order): string => {
+    return order.order_number || `ORD${order.id}`;
+};
+
+const getOrderAmount = (order: Order): number => {
+    return order.total_amount || order.amount || 0;
+};
+
+const calculateItemTotal = (item: OrderItem): number => {
+    return (item.quantity || 1) * (item.price || 0);
+};
+
+const getItemName = (item: OrderItem): string => {
+    return item.product?.name || item.name || 'Item';
+};
+
+const extractOrderData = (response: any): Order | null => {
+    if (response?.data) return response.data;
+    if (response?.order) return response.order;
+    if (response && typeof response === 'object' && 'id' in response) {
+        return response as Order;
+    }
+    return null;
+};
+
+// ============================================================================
+// SUB COMPONENTS
+// ============================================================================
+const OrderDetailHeader = memo(({ onBack }: { onBack: () => void }) => {
+    const colors = useTheme();
+
+    return (
+        <View style={[styles.header, { backgroundColor: colors.themePrimary }]}>
+            <AppTouchableRipple style={styles.backButton} onPress={onBack}>
+                <Icon name="arrow-left" size={24} color={colors.white} />
+            </AppTouchableRipple>
+            <Text style={[styles.headerTitle, { color: colors.white }]}>
+                Order Details
+            </Text>
+            <View style={styles.headerRight} />
+        </View>
+    );
+});
+
+const CardDivider = memo(() => {
+    const colors = useTheme();
+    return <View style={[styles.divider, { backgroundColor: colors.border }]} />;
+});
+
+const InfoCard = memo(({ icon, title, children }: InfoCardProps) => {
+    const colors = useTheme();
+
+    return (
+        <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
+            <View style={styles.cardHeader}>
+                <Icon name={icon} size={20} color={colors.themePrimary} />
+                <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
+                    {title}
+                </Text>
+            </View>
+            <CardDivider />
+            {children}
+        </View>
+    );
+});
+
+const InfoRow = memo(({ label, value, isAmount = false }: InfoRowProps) => {
+    const colors = useTheme();
+
+    return (
+        <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: colors.textLabel }]}>
+                {label}
+            </Text>
+            <Text
+                style={[
+                    isAmount ? styles.amountValue : styles.infoValue,
+                    { color: isAmount ? colors.themePrimary : colors.textPrimary },
+                ]}
+            >
+                {value}
+            </Text>
+        </View>
+    );
+});
+
+const StatusBadge = memo(({ statusInfo }: { statusInfo: StatusInfo }) => {
+    return (
+        <View
+            style={[
+                styles.statusBadge,
+                { backgroundColor: statusInfo.color + '20' },
+            ]}
+        >
+            <Icon
+                name={statusInfo.icon}
+                size={18}
+                color={statusInfo.color}
+                style={styles.statusIcon}
+            />
+            <Text
+                style={[
+                    styles.statusText,
+                    { color: statusInfo.color },
+                ]}
+            >
+                {statusInfo.label}
+            </Text>
+        </View>
+    );
+});
+
+const OrderInfoCard = memo(({ order, statusInfo }: { order: Order; statusInfo: StatusInfo }) => {
+    const colors = useTheme();
+    const orderNumber = getOrderNumber(order);
+    const amount = getOrderAmount(order);
+
+    return (
+        <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
+            <View style={styles.cardHeader}>
+                <View>
+                    <Text style={[styles.orderNumber, { color: colors.textPrimary }]}>
+                        {orderNumber}
+                    </Text>
+                    <Text style={[styles.orderDate, { color: colors.textLabel }]}>
+                        {formatDate(order.created_at)}
+                    </Text>
+                </View>
+                <StatusBadge statusInfo={statusInfo} />
+            </View>
+
+            <CardDivider />
+
+            <View style={styles.infoSection}>
+                <InfoRow
+                    label="Items:"
+                    value={order.items_count || order.items?.length || 0}
+                />
+                <InfoRow
+                    label="Total Amount:"
+                    value={formatCurrency(amount)}
+                    isAmount
+                />
+                {order.payment_mode && (
+                    <InfoRow
+                        label="Payment:"
+                        value={order.payment_mode}
+                    />
+                )}
+            </View>
+        </View>
+    );
+});
+
+const ConfirmationCodeCard = memo(({ code }: { code: string }) => {
+    const colors = useTheme();
+
+    return (
+        <InfoCard icon="key" title="Confirmation Code">
+            <View style={styles.confirmationCodeContainer}>
+                <Text style={[styles.confirmationCode, { color: colors.themePrimary }]}>
+                    {code}
+                </Text>
+                <Text style={[styles.confirmationCodeHint, { color: colors.textDescription }]}>
+                    Share this code with the delivery person to confirm delivery
+                </Text>
+            </View>
+        </InfoCard>
+    );
+});
+
+const ETACard = memo(({ eta }: { eta: string }) => {
+    const colors = useTheme();
+
+    return (
+        <InfoCard icon="clock-fast" title="Estimated Delivery Time">
+            <Text style={[styles.etaValue, { color: colors.themePrimary }]}>
+                {eta}
+            </Text>
+        </InfoCard>
+    );
+});
+
+const DeliveryPersonCard = memo(({ name, phone }: { name: string; phone?: string }) => {
+    const colors = useTheme();
+
+    return (
+        <InfoCard icon="account-circle" title="Delivery Person">
+            <View style={styles.infoSection}>
+                <Text style={[styles.infoValue, { color: colors.textPrimary, marginBottom: 4 }]}>
+                    {name}
+                </Text>
+                {phone && (
+                    <Text style={[styles.infoLabel, { color: colors.textLabel }]}>
+                        {phone}
+                    </Text>
+                )}
+            </View>
+        </InfoCard>
+    );
+});
+
+const AddressCard = memo(({ address }: { address: string }) => {
+    const colors = useTheme();
+
+    return (
+        <InfoCard icon="map-marker" title="Delivery Address">
+            <Text style={[styles.addressText, { color: colors.textDescription }]}>
+                {address}
+            </Text>
+        </InfoCard>
+    );
+});
+
+const OrderItemRow = memo(({ item, index }: { item: OrderItem; index: number }) => {
+    const colors = useTheme();
+
+    return (
+        <View key={index} style={styles.itemRow}>
+            <View style={styles.itemInfo}>
+                <Text style={[styles.itemName, { color: colors.textPrimary }]}>
+                    {getItemName(item)}
+                </Text>
+                <Text style={[styles.itemDetails, { color: colors.textLabel }]}>
+                    Qty: {item.quantity || 1} × ₹{item.price || 0}
+                </Text>
+            </View>
+            <Text style={[styles.itemTotal, { color: colors.textPrimary }]}>
+                {formatCurrency(calculateItemTotal(item))}
+            </Text>
+        </View>
+    );
+});
+
+const OrderItemsCard = memo(({ items }: { items: OrderItem[] }) => {
+    return (
+        <InfoCard icon="format-list-bulleted" title="Order Items">
+            {items.map((item, index) => (
+                <OrderItemRow key={index} item={item} index={index} />
+            ))}
+        </InfoCard>
+    );
+});
+
+const LoadingState = memo(() => {
+    const colors = useTheme();
+
+    return (
+        <MainContainer
+            statusBarColor={colors.themePrimary}
+            statusBarStyle="light-content"
+            showLoader={true}
+        >
+            <View />
+        </MainContainer>
+    );
+});
+
+const ErrorState = memo(({ message }: { message: string }) => {
+    const colors = useTheme();
+
+    return (
+        <MainContainer
+            statusBarColor={colors.themePrimary}
+            statusBarStyle="light-content"
+        >
+            <View style={[styles.container, { backgroundColor: colors.backgroundPrimary }]}>
+                <Text style={[styles.errorText, { color: colors.textPrimary }]}>
+                    {message}
+                </Text>
+            </View>
+        </MainContainer>
+    );
+});
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
 const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ navigation, route }) => {
     const colors = useTheme();
     const { orderId } = route.params || {};
+
+    // ============================================================================
+    // STATE
+    // ============================================================================
     const [order, setOrder] = useState<Order | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
 
+    // ============================================================================
+    // API HANDLERS
+    // ============================================================================
     const fetchOrderDetails = useCallback(async () => {
         if (!orderId) {
             Alert.alert('Error', 'Order ID is missing');
@@ -52,7 +431,7 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ navigation, route
         setLoading(true);
         try {
             const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
-            
+
             const response = await ApiManager.get({
                 endpoint: `${constant.apiEndPoints.getOrder}${orderId}`,
                 token: token || undefined,
@@ -63,15 +442,7 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ navigation, route
                 console.log('✅ Order Detail Response:', response);
             }
 
-            // Handle different response structures
-            let orderData: Order | null = null;
-            if (response?.data) {
-                orderData = response.data;
-            } else if (response?.order) {
-                orderData = response.order;
-            } else if (response && typeof response === 'object' && 'id' in response) {
-                orderData = response as Order;
-            }
+            const orderData = extractOrderData(response);
 
             if (orderData) {
                 setOrder(orderData);
@@ -88,88 +459,42 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ navigation, route
         }
     }, [orderId, navigation]);
 
+    // ============================================================================
+    // EFFECTS
+    // ============================================================================
     useEffect(() => {
         fetchOrderDetails();
     }, [fetchOrderDetails]);
 
-    const getStatusInfo = (status: string) => {
-        const statusLower = status?.toLowerCase() || '';
-        switch (statusLower) {
-            case 'pending':
-            case 'new':
-                return { label: 'Pending', color: '#ff9800', icon: 'clock-outline' };
-            case 'confirmed':
-            case 'accepted':
-                return { label: 'Confirmed', color: '#2196f3', icon: 'check-circle-outline' };
-            case 'packed':
-            case 'ready':
-                return { label: 'Packed', color: '#9c27b0', icon: 'package-variant' };
-            case 'assigned':
-                return { label: 'Assigned', color: '#ff5722', icon: 'account-check' };
-            case 'picked':
-            case 'picked_up':
-                return { label: 'Picked Up', color: '#00bcd4', icon: 'truck-delivery' };
-            case 'delivering':
-            case 'out_for_delivery':
-                return { label: 'Out for Delivery', color: '#673ab7', icon: 'truck' };
-            case 'delivered':
-            case 'completed':
-                return { label: 'Delivered', color: '#4caf50', icon: 'check-circle' };
-            case 'cancelled':
-            case 'rejected':
-                return { label: 'Cancelled', color: '#f44336', icon: 'close-circle' };
-            default:
-                return { label: status || 'Unknown', color: colors.textLabel, icon: 'help-circle' };
-        }
-    };
+    // ============================================================================
+    // COMPUTED VALUES
+    // ============================================================================
+    const statusInfo = order ? getStatusInfo(order.status, colors.textLabel) : null;
 
-    const formatDate = (dateString?: string) => {
-        if (!dateString) return 'N/A';
-        try {
-            const date = new Date(dateString);
-            return date.toLocaleString('en-IN', {
-                day: 'numeric',
-                month: 'short',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-            });
-        } catch {
-            return dateString;
-        }
-    };
+    // ============================================================================
+    // HANDLERS
+    // ============================================================================
+    const handleGoBack = useCallback(() => {
+        navigation.goBack();
+    }, [navigation]);
 
+    // ============================================================================
+    // RENDER - LOADING STATE
+    // ============================================================================
     if (loading) {
-        return (
-            <MainContainer
-                statusBarColor={colors.themePrimary}
-                statusBarStyle="light-content"
-                showLoader={true}
-            >
-                <View />
-            </MainContainer>
-        );
+        return <LoadingState />;
     }
 
+    // ============================================================================
+    // RENDER - ERROR STATE
+    // ============================================================================
     if (!order) {
-        return (
-            <MainContainer
-                statusBarColor={colors.themePrimary}
-                statusBarStyle="light-content"
-            >
-                <View style={[styles.container, { backgroundColor: colors.backgroundPrimary }]}>
-                    <Text style={[styles.errorText, { color: colors.textPrimary }]}>
-                        Order not found
-                    </Text>
-                </View>
-            </MainContainer>
-        );
+        return <ErrorState message="Order not found" />;
     }
 
-    const statusInfo = getStatusInfo(order.status);
-    const orderNumber = order.order_number || `ORD${order.id}`;
-    const amount = order.total_amount || order.amount || 0;
-
+    // ============================================================================
+    // RENDER - ORDER DETAILS
+    // ============================================================================
     return (
         <MainContainer
             statusBarColor={colors.themePrimary}
@@ -178,192 +503,43 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ navigation, route
         >
             <View style={[styles.container, { backgroundColor: colors.backgroundPrimary }]}>
                 {/* Header */}
-                <View style={[styles.header, { backgroundColor: colors.themePrimary }]}>
-                    <AppTouchableRipple
-                        style={styles.backButton}
-                        onPress={() => navigation.goBack()}
-                    >
-                        <Icon name="arrow-left" size={24} color={colors.white} />
-                    </AppTouchableRipple>
-                    <Text style={[styles.headerTitle, { color: colors.white }]}>
-                        Order Details
-                    </Text>
-                    <View style={styles.headerRight} />
-                </View>
+                <OrderDetailHeader onBack={handleGoBack} />
 
+                {/* Content */}
                 <ScrollView
                     style={styles.content}
                     contentContainerStyle={styles.contentContainer}
                     showsVerticalScrollIndicator={false}
                 >
                     {/* Order Info Card */}
-                    <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
-                        <View style={styles.cardHeader}>
-                            <View>
-                                <Text style={[styles.orderNumber, { color: colors.textPrimary }]}>
-                                    {orderNumber}
-                                </Text>
-                                <Text style={[styles.orderDate, { color: colors.textLabel }]}>
-                                    {formatDate(order.created_at)}
-                                </Text>
-                            </View>
-                            <View
-                                style={[
-                                    styles.statusBadge,
-                                    { backgroundColor: statusInfo.color + '20' },
-                                ]}
-                            >
-                                <Icon
-                                    name={statusInfo.icon}
-                                    size={18}
-                                    color={statusInfo.color}
-                                    style={styles.statusIcon}
-                                />
-                                <Text
-                                    style={[
-                                        styles.statusText,
-                                        { color: statusInfo.color },
-                                    ]}
-                                >
-                                    {statusInfo.label}
-                                </Text>
-                            </View>
-                        </View>
-
-                        <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-                        <View style={styles.infoSection}>
-                            <View style={styles.infoRow}>
-                                <Text style={[styles.infoLabel, { color: colors.textLabel }]}>
-                                    Items:
-                                </Text>
-                                <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
-                                    {order.items_count || order.items?.length || 0}
-                                </Text>
-                            </View>
-                            <View style={styles.infoRow}>
-                                <Text style={[styles.infoLabel, { color: colors.textLabel }]}>
-                                    Total Amount:
-                                </Text>
-                                <Text style={[styles.amountValue, { color: colors.themePrimary }]}>
-                                    ₹{amount.toFixed(2)}
-                                </Text>
-                            </View>
-                            {order.payment_mode && (
-                                <View style={styles.infoRow}>
-                                    <Text style={[styles.infoLabel, { color: colors.textLabel }]}>
-                                        Payment:
-                                    </Text>
-                                    <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
-                                        {order.payment_mode}
-                                    </Text>
-                                </View>
-                            )}
-                        </View>
-                    </View>
+                    {statusInfo && (
+                        <OrderInfoCard order={order} statusInfo={statusInfo} />
+                    )}
 
                     {/* Confirmation Code Card */}
                     {order.confirmation_code && (
-                        <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
-                            <View style={styles.cardHeader}>
-                                <Icon name="key" size={20} color={colors.themePrimary} />
-                                <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
-                                    Confirmation Code
-                                </Text>
-                            </View>
-                            <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                            <View style={styles.confirmationCodeContainer}>
-                                <Text style={[styles.confirmationCode, { color: colors.themePrimary }]}>
-                                    {order.confirmation_code}
-                                </Text>
-                                <Text style={[styles.confirmationCodeHint, { color: colors.textDescription }]}>
-                                    Share this code with the delivery person to confirm delivery
-                                </Text>
-                            </View>
-                        </View>
+                        <ConfirmationCodeCard code={order.confirmation_code} />
                     )}
 
                     {/* ETA Card */}
-                    {order.eta && (
-                        <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
-                            <View style={styles.cardHeader}>
-                                <Icon name="clock-fast" size={20} color={colors.themePrimary} />
-                                <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
-                                    Estimated Delivery Time
-                                </Text>
-                            </View>
-                            <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                            <Text style={[styles.etaValue, { color: colors.themePrimary }]}>
-                                {order.eta}
-                            </Text>
-                        </View>
-                    )}
+                    {order.eta && <ETACard eta={order.eta} />}
 
                     {/* Delivery Person Card */}
                     {order.delivery_person_name && (
-                        <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
-                            <View style={styles.cardHeader}>
-                                <Icon name="account-circle" size={20} color={colors.themePrimary} />
-                                <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
-                                    Delivery Person
-                                </Text>
-                            </View>
-                            <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                            <View style={styles.infoSection}>
-                                <Text style={[styles.infoValue, { color: colors.textPrimary, marginBottom: 4 }]}>
-                                    {order.delivery_person_name}
-                                </Text>
-                                {order.delivery_person_phone && (
-                                    <Text style={[styles.infoLabel, { color: colors.textLabel }]}>
-                                        {order.delivery_person_phone}
-                                    </Text>
-                                )}
-                            </View>
-                        </View>
+                        <DeliveryPersonCard
+                            name={order.delivery_person_name}
+                            phone={order.delivery_person_phone}
+                        />
                     )}
 
                     {/* Address Card */}
                     {(order.address || order.full_address) && (
-                        <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
-                            <View style={styles.cardHeader}>
-                                <Icon name="map-marker" size={20} color={colors.themePrimary} />
-                                <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
-                                    Delivery Address
-                                </Text>
-                            </View>
-                            <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                            <Text style={[styles.addressText, { color: colors.textDescription }]}>
-                                {order.full_address || order.address}
-                            </Text>
-                        </View>
+                        <AddressCard address={order.full_address || order.address || ''} />
                     )}
 
-                    {/* Items Card */}
+                    {/* Order Items Card */}
                     {order.items && order.items.length > 0 && (
-                        <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
-                            <View style={styles.cardHeader}>
-                                <Icon name="format-list-bulleted" size={20} color={colors.themePrimary} />
-                                <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
-                                    Order Items
-                                </Text>
-                            </View>
-                            <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                            {order.items.map((item: any, index: number) => (
-                                <View key={index} style={styles.itemRow}>
-                                    <View style={styles.itemInfo}>
-                                        <Text style={[styles.itemName, { color: colors.textPrimary }]}>
-                                            {item.product?.name || item.name || 'Item'}
-                                        </Text>
-                                        <Text style={[styles.itemDetails, { color: colors.textLabel }]}>
-                                            Qty: {item.quantity || 1} × ₹{item.price || 0}
-                                        </Text>
-                                    </View>
-                                    <Text style={[styles.itemTotal, { color: colors.textPrimary }]}>
-                                        ₹{((item.quantity || 1) * (item.price || 0)).toFixed(2)}
-                                    </Text>
-                                </View>
-                            ))}
-                        </View>
+                        <OrderItemsCard items={order.items} />
                     )}
                 </ScrollView>
             </View>
@@ -371,8 +547,11 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ navigation, route
     );
 };
 
-export default OrderDetailScreen;
+export default memo(OrderDetailScreen);
 
+// ============================================================================
+// STYLES
+// ============================================================================
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -531,4 +710,3 @@ const styles = StyleSheet.create({
         marginTop: 50,
     },
 });
-
