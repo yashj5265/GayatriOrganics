@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import ApiManager from '../managers/ApiManager';
 import StorageManager from '../managers/StorageManager';
 import constant from '../utilities/constant';
+import { AddressModel, AddressListModel } from '../dataModels/models';
 
 export interface Address {
     id: string;
@@ -80,26 +81,43 @@ export const AddressProvider: React.FC<{ children: React.ReactNode }> = ({ child
             }
 
             // Fetch addresses from API
-            const response = await ApiManager.get({
+            const response = await ApiManager.get<AddressListModel>({
                 endpoint: constant.apiEndPoints.addressList,
                 token: token,
                 showError: false, // Don't show error toast, handle silently
             });
 
-            if (response?.data && Array.isArray(response.data)) {
+            console.log('response address list', response);
+
+            // Handle response structure: ApiResponse wraps AddressListModel
+            // Response can be: { success, data: { success, data: AddressModel[] } } or { success, data: AddressModel[] } directly
+            let addressesData: AddressModel[] = [];
+
+            if (response?.data) {
+                // Check if data is AddressListModel (has nested data) or direct array
+                if (Array.isArray(response.data)) {
+                    // Direct array: { success, data: AddressModel[] }
+                    addressesData = response.data;
+                } else if (response.data.data && Array.isArray(response.data.data)) {
+                    // Nested: { success, data: { success, data: AddressModel[] } }
+                    addressesData = response.data.data;
+                }
+            }
+
+            if (addressesData && Array.isArray(addressesData) && addressesData.length > 0) {
                 // Map API response to Address format
-                const apiAddresses: Address[] = response.data.map((addr: any) => ({
-                    id: addr.id?.toString() || addr.id,
-                    name: addr.full_name || addr.name || '',
-                    mobile: addr.phone || addr.mobile || '',
-                    addressLine1: addr.address || addr.addressLine1 || '',
-                    addressLine2: addr.address_line2 || addr.addressLine2 || '',
+                const apiAddresses: Address[] = addressesData.map((addr: AddressModel) => ({
+                    id: addr.id.toString(),
+                    name: addr.full_name || '',
+                    mobile: addr.phone || '',
+                    addressLine1: addr.address || '',
+                    addressLine2: '',
                     city: addr.city || '',
                     state: addr.state || '',
                     pincode: addr.pincode || '',
-                    landmark: addr.landmark || '',
-                    addressType: (addr.address_type?.toLowerCase() || addr.addressType || 'home') as 'home' | 'work' | 'other',
-                    isDefault: addr.is_default || addr.isDefault || false,
+                    landmark: '',
+                    addressType: (addr.address_type?.toLowerCase() || 'home') as 'home' | 'work' | 'other',
+                    isDefault: addr.is_default === 1,
                 }));
 
                 setAddresses(apiAddresses);

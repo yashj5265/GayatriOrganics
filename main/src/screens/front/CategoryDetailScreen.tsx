@@ -21,6 +21,7 @@ import ApiManager from '../../managers/ApiManager';
 import StorageManager from '../../managers/StorageManager';
 import constant from '../../utilities/constant';
 import fonts from '../../styles/fonts';
+import { ProductModel, ProductListModel } from '../../dataModels/models';
 
 import type { Product as ProductListProduct } from '../front/ProductListScreen';
 
@@ -163,17 +164,41 @@ const useCategoryProducts = (categoryId: number | undefined) => {
 
         try {
             const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
-            const response = await ApiManager.get({
+            const response = await ApiManager.get<ProductListModel>({
                 endpoint: constant.apiEndPoints.allProducts,
                 token: token || undefined,
                 showError: false,
             });
 
             if (response?.data && Array.isArray(response.data)) {
-                const categoryProducts = response.data.filter(
-                    (product: ProductListProduct) => product.category_id === categoryId
-                );
-                setProducts(categoryProducts);
+                // Transform ProductModel to ProductListProduct format
+                const transformedProducts: ProductListProduct[] = response.data
+                    .filter((p: ProductModel) => p.category_id === categoryId)
+                    .map((p: ProductModel) => {
+                        const stock = parseFloat(p.available_units) || 0;
+                        return {
+                            id: p.id,
+                            category_id: p.category_id,
+                            name: p.name,
+                            description: p.description,
+                            price: p.price,
+                            stock: stock,
+                            image1: p.image1,
+                            image2: p.image2,
+                            image3: p.image3,
+                            image4: p.image4,
+                            image5: p.image5,
+                            created_at: p.created_at,
+                            updated_at: p.updated_at,
+                            category: {
+                                id: p.category.id,
+                                name: p.category.name,
+                                description: p.category.description,
+                                image: p.category.image,
+                            },
+                        };
+                    });
+                setProducts(transformedProducts);
             }
         } catch (error) {
             console.error('Fetch Category Products Error:', error);

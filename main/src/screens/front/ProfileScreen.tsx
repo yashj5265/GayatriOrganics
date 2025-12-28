@@ -10,6 +10,8 @@ import StorageManager from '../../managers/StorageManager';
 import ApiManager from '../../managers/ApiManager';
 import fonts from '../../styles/fonts';
 import constant from '../../utilities/constant';
+import { ProfileModel } from '../../dataModels/models';
+import EditProfileModal from '../../popups/EditProfileModal';
 
 // ============================================================================
 // CONSTANTS
@@ -91,21 +93,20 @@ interface MenuSectionProps {
 // ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
-const extractUserName = (userData: any): string => {
+const extractUserName = (userData: ProfileModel | UserData | any): string => {
     if (!userData || typeof userData !== 'object') return DEFAULT_USER_NAME;
     return userData.name || userData.full_name || DEFAULT_USER_NAME;
 };
 
-const extractUserMobile = (userData: any): string => {
+const extractUserMobile = (userData: ProfileModel | UserData | any): string => {
     if (!userData || typeof userData !== 'object') return '';
     return userData.mobile || userData.phone || '';
 };
 
-const normalizeUserData = (profileData: any): UserData => {
+const normalizeUserData = (profileData: ProfileModel): UserData => {
     return {
-        ...profileData,
-        name: profileData.name || profileData.full_name,
-        mobile: profileData.mobile || profileData.phone,
+        name: profileData.name || undefined,
+        mobile: profileData.mobile || undefined,
     };
 };
 
@@ -247,6 +248,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
     const [userName, setUserName] = useState<string>(DEFAULT_USER_NAME);
     const [userMobile, setUserMobile] = useState<string>('');
     const [loading, setLoading] = useState(false);
+    const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+    const [profileData, setProfileData] = useState<ProfileModel | null>(null);
 
     // ============================================================================
     // COMPUTED VALUES
@@ -270,16 +273,30 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
 
     const loadUserDataFromAPI = useCallback(async (token: string): Promise<boolean> => {
         try {
-            const response = await ApiManager.get({
+            const response = await ApiManager.get<ProfileModel>({
                 endpoint: constant.apiEndPoints.getProfile,
                 token: token,
                 showError: false,
             });
 
-            if (response?.data) {
-                const profileData = response.data;
+            console.log('response profile', response);
+
+            // ApiManager returns ApiResponse<T>, so data is in response.data
+            // But also handle case where response itself might be the ProfileModel
+            let profileData: ProfileModel | null = null;
+
+            if (response?.data && typeof response.data === 'object' && 'id' in response.data && 'mobile' in response.data) {
+                // Wrapped in ApiResponse structure
+                profileData = response.data as ProfileModel;
+            } else if (response && typeof response === 'object' && 'id' in response && 'mobile' in response) {
+                // Direct ProfileModel response
+                profileData = response as unknown as ProfileModel;
+            }
+
+            if (profileData) {
                 setUserName(extractUserName(profileData));
                 setUserMobile(extractUserMobile(profileData));
+                setProfileData(profileData);
 
                 // Update stored user data
                 await StorageManager.setItem(
@@ -338,6 +355,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
                 case 'MyOrders':
                     navigation.navigate(constant.routeName.orders);
                     break;
+                case 'EditProfile':
+                    setShowEditProfileModal(true);
+                    break;
                 default:
                     // Future: Implement navigation for other routes when available
                     break;
@@ -345,6 +365,24 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
         },
         [navigation]
     );
+
+    const handleProfileUpdateSuccess = useCallback(
+        async (updatedName: string) => {
+            setUserName(updatedName);
+            setShowEditProfileModal(false);
+
+            // Reload profile data from API to get latest
+            const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
+            if (token) {
+                await loadUserDataFromAPI(token);
+            }
+        },
+        [loadUserDataFromAPI]
+    );
+
+    const handleCloseEditProfileModal = useCallback(() => {
+        setShowEditProfileModal(false);
+    }, []);
 
     // ============================================================================
     // LOGOUT HANDLERS
@@ -425,6 +463,18 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
                     <VersionInfo />
                 </ScrollView>
             </View>
+
+            {/* Edit Profile Modal */}
+            {profileData && (
+                <EditProfileModal
+                    visible={showEditProfileModal}
+                    colors={colors}
+                    userId={profileData.id}
+                    currentName={userName}
+                    onClose={handleCloseEditProfileModal}
+                    onSuccess={handleProfileUpdateSuccess}
+                />
+            )}
         </MainContainer>
     );
 };

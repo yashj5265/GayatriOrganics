@@ -90,8 +90,11 @@ export default class ApiManager {
         try {
             // Enhanced logging in dev mode
             if (__DEV__) {
-                // Check if price exists in payload for debugging
-                if (method !== "GET" && params && typeof params === 'object' && !Array.isArray(params)) {
+                // Check if price exists in payload for debugging (only for product-related endpoints)
+                const productEndpoints = ['/api/admin/products', '/products', '/product'];
+                const isProductEndpoint = productEndpoints.some(ep => endpoint.includes(ep));
+
+                if (isProductEndpoint && method !== "GET" && params && typeof params === 'object' && !Array.isArray(params)) {
                     if (!('price' in params)) {
                         console.error('❌ Price field MISSING from payload!');
                     }

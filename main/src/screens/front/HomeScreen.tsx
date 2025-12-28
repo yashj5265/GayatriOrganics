@@ -21,6 +21,7 @@ import fonts from '../../styles/fonts';
 import constant from '../../utilities/constant';
 import { ProductListScreenProps, Product as ProductListProduct } from './ProductListScreen';
 import { CategoryDetailScreenProps } from './CategoryDetailScreen';
+import { CategoryModel, CategoryListModel, ProductModel, ProductListModel } from '../../dataModels/models';
 
 // ============================================================================
 // CONSTANTS
@@ -95,15 +96,6 @@ interface HomeScreenProps {
     navigation: NativeStackNavigationProp<any>;
 }
 
-interface Category {
-    id: number;
-    name: string;
-    description?: string;
-    image?: string;
-    image_url?: string;
-    product_count?: number;
-}
-
 interface HeaderProps {
     userName: string;
     selectedAddress: Address | null;
@@ -122,9 +114,9 @@ interface SearchBarProps {
 }
 
 interface CategoryCardProps {
-    category: Category;
+    category: CategoryModel;
     index: number;
-    onPress: (category: Category) => void;
+    onPress: (category: CategoryModel) => void;
 }
 
 interface ProductCardProps {
@@ -334,7 +326,7 @@ const EmptyState = memo(({ message }: { message: string }) => {
 
 const CategoryCard = memo(({ category, index, onPress }: CategoryCardProps) => {
     const colors = useTheme();
-    const imageUrl = getImageUrl(category.image || category.image_url);
+    const imageUrl = getImageUrl(category.image_url);
 
     return (
         <AppTouchableRipple
@@ -438,9 +430,9 @@ const CategoriesSection = memo(({
     onCategoryPress,
     onViewAll,
 }: {
-    categories: Category[];
+    categories: CategoryModel[];
     loading: boolean;
-    onCategoryPress: (category: Category) => void;
+    onCategoryPress: (category: CategoryModel) => void;
     onViewAll: () => void;
 }) => {
     return (
@@ -547,7 +539,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     // ============================================================================
     const [userName, setUserName] = useState<string>('Guest');
     const [showAddressModal, setShowAddressModal] = useState(false);
-    const [categories, setCategories] = useState<Category[]>([]);
+    const [categories, setCategories] = useState<CategoryModel[]>([]);
     const [featuredProducts, setFeaturedProducts] = useState<ProductListProduct[]>([]);
     const [categoriesLoading, setCategoriesLoading] = useState<boolean>(false);
     const [productsLoading, setProductsLoading] = useState<boolean>(false);
@@ -577,13 +569,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         try {
             const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
 
-            const response = await ApiManager.get({
+            const response = await ApiManager.get<CategoryListModel>({
                 endpoint: constant.apiEndPoints.allCategories,
                 token: token || undefined,
                 showError: false,
             });
 
-            const categoryData =
+            const categoryData: CategoryModel[] =
                 response?.data && Array.isArray(response.data)
                     ? response.data
                     : response?.success && Array.isArray(response?.data)
@@ -603,20 +595,46 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         try {
             const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
 
-            const response = await ApiManager.get({
+            const response = await ApiManager.get<ProductListModel>({
                 endpoint: constant.apiEndPoints.allProducts,
                 token: token || undefined,
                 showError: false,
             });
 
-            const productData =
+            const productData: ProductModel[] =
                 response?.data && Array.isArray(response.data)
                     ? response.data
-                    : response?.success && Array.isArray(response?.data)
+                    : response?.status && Array.isArray(response?.data)
                         ? response.data
                         : [];
 
-            const inStockProducts = productData
+            // Transform ProductModel to ProductListProduct format
+            const transformedProducts: ProductListProduct[] = productData.map((p: ProductModel) => {
+                const stock = parseFloat(p.available_units) || 0;
+                return {
+                    id: p.id,
+                    category_id: p.category_id,
+                    name: p.name,
+                    description: p.description,
+                    price: p.price,
+                    stock: stock,
+                    image1: p.image1,
+                    image2: p.image2,
+                    image3: p.image3,
+                    image4: p.image4,
+                    image5: p.image5,
+                    created_at: p.created_at,
+                    updated_at: p.updated_at,
+                    category: {
+                        id: p.category.id,
+                        name: p.category.name,
+                        description: p.category.description,
+                        image: p.category.image,
+                    },
+                };
+            });
+
+            const inStockProducts = transformedProducts
                 .filter((p: ProductListProduct) => p.stock > 0)
                 .slice(0, MAX_FEATURED_PRODUCTS);
 
@@ -644,7 +662,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     }, [navigation]);
 
     const handleCategoryPress = useCallback(
-        (category: Category) => {
+        (category: CategoryModel) => {
             if (!category || !category.id) {
                 console.error('❌ Invalid category data:', category);
                 return;

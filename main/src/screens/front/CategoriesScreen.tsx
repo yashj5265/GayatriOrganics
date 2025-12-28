@@ -188,7 +188,7 @@ const CategoriesGrid = React.memo(({
         [onCategoryPress, colors]
     );
 
-    const keyExtractor = useCallback((item: Category) => item.id.toString(), []);
+    const keyExtractor = useCallback((item: CategoryModel) => item.id.toString(), []);
 
     return (
         <FlatList
@@ -262,8 +262,6 @@ const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ navigation }) => {
                 endpoint: constant.apiEndPoints.allCategories,
                 token: token || undefined,
             });
-
-            console.log('response categories', response);
 
             // Handle different response formats
             const categoryData: CategoryModel[] =

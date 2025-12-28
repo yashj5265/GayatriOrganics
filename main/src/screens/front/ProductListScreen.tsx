@@ -20,6 +20,7 @@ import StorageManager from '../../managers/StorageManager';
 import fonts from '../../styles/fonts';
 import constant from '../../utilities/constant';
 import { ProductDetailScreenProps } from './ProductDetailScreen';
+import { ProductModel, ProductListModel, ProductCategoryModel } from '../../dataModels/models';
 
 // ============================================================================
 // CONSTANTS
@@ -135,14 +136,47 @@ const searchProductsLocally = (products: Product[], query: string): Product[] =>
     );
 };
 
-const extractProductsData = (response: any): Product[] => {
+const extractProductsData = (response: ProductListModel | any): Product[] => {
+    let productsData: ProductModel[] = [];
+
     if (response?.status && response?.data && Array.isArray(response.data)) {
-        return response.data;
+        productsData = response.data;
+    } else if (response?.data && Array.isArray(response.data)) {
+        productsData = response.data;
+    } else {
+        return [];
     }
-    if (response?.data && Array.isArray(response.data)) {
-        return response.data;
-    }
-    return [];
+
+    // Transform ProductModel to Product (calculate stock from available_units)
+    return productsData.map((product: ProductModel): Product => {
+        // Parse available_units string to number for stock
+        const stock = parseFloat(product.available_units) || 0;
+
+        // Transform ProductCategoryModel to Category
+        const category: Category = {
+            id: product.category.id,
+            name: product.category.name,
+            description: product.category.description,
+            image: product.category.image,
+        };
+
+        return {
+            id: product.id,
+            category_id: product.category_id,
+            name: product.name,
+            description: product.description,
+            price: product.price,
+            stock: stock,
+            image1: product.image1,
+            image2: product.image2,
+            image3: product.image3,
+            image4: product.image4,
+            image5: product.image5,
+            created_at: product.created_at,
+            updated_at: product.updated_at,
+            category: category,
+        };
+    });
 };
 
 // ============================================================================
@@ -386,11 +420,13 @@ const ProductListScreen: React.FC<ProductListScreenNavigationProps> = ({
                 constant.shareInstanceKey.authToken
             );
 
-            const response = await ApiManager.get({
+            const response = await ApiManager.get<ProductListModel>({
                 endpoint: constant.apiEndPoints.allProducts,
                 token: token || undefined,
                 showError: true,
             });
+
+            console.log('response products', response);
 
             const productsData = extractProductsData(response);
             setProducts(productsData);

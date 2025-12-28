@@ -26,6 +26,7 @@ import fonts from '../../styles/fonts';
 import constant from '../../utilities/constant';
 import { AppColors } from '../../styles/colors';
 import { Category } from './ProductListScreen';
+import { ProductModel, ProductDetailModel } from '../../dataModels/models';
 
 // ============================================================================
 // CONSTANTS
@@ -67,6 +68,7 @@ export interface Product {
     description: string;
     price: string;
     stock: number;
+    product_type?: string;
     image1: string;
     image2: string | null;
     image3: string | null;
@@ -133,10 +135,47 @@ const extractProductImages = (product: Product): string[] => {
         .filter((img): img is string => img !== null);
 };
 
-const extractProductData = (response: any): Product | null => {
-    if (response?.status && response?.data) return response.data;
-    if (response?.data) return response.data;
-    return null;
+const extractProductData = (response: ProductDetailModel | any): Product | null => {
+    let productData: ProductModel | null = null;
+
+    if (response?.status && response?.data) {
+        productData = response.data;
+    } else if (response?.data) {
+        productData = response.data;
+    } else {
+        return null;
+    }
+
+    if (!productData) return null;
+
+    // Transform ProductModel to Product (calculate stock from available_units)
+    const stock = parseFloat(productData.available_units) || 0;
+
+    // Transform ProductCategoryModel to Category
+    const category: Category = {
+        id: productData.category.id,
+        name: productData.category.name,
+        description: productData.category.description,
+        image: productData.category.image,
+    };
+
+    return {
+        id: productData.id,
+        category_id: productData.category_id,
+        name: productData.name,
+        description: productData.description,
+        price: productData.price,
+        stock: stock,
+        product_type: productData.product_type,
+        image1: productData.image1,
+        image2: productData.image2,
+        image3: productData.image3,
+        image4: productData.image4,
+        image5: productData.image5,
+        created_at: productData.created_at,
+        updated_at: productData.updated_at,
+        category: category,
+    };
 };
 
 // ============================================================================
@@ -427,8 +466,18 @@ const FeatureItem = memo(({
     );
 });
 
-const ProductFeatures = memo(() => {
+const ProductFeatures = memo(({ productType }: { productType?: string }) => {
     const colors = useTheme();
+
+    // Filter features - only show "100% Organic" if product_type is "organic"
+    const filteredFeatures = PRODUCT_FEATURES.filter((feature) => {
+        if (feature.title === '100% Organic') {
+            return productType === 'organic';
+        }
+        return true;
+    });
+
+    if (filteredFeatures.length === 0) return null;
 
     return (
         <View style={styles.featuresSection}>
@@ -436,7 +485,7 @@ const ProductFeatures = memo(() => {
                 Product Features
             </Text>
             <View style={styles.featuresList}>
-                {PRODUCT_FEATURES.map((feature, index) => (
+                {filteredFeatures.map((feature, index) => (
                     <FeatureItem
                         key={index}
                         icon={feature.icon}
@@ -595,11 +644,13 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
         try {
             const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
 
-            const response = await ApiManager.get({
+            const response = await ApiManager.get<ProductDetailModel>({
                 endpoint: `${constant.apiEndPoints.getProduct}${productId}`,
                 token: token || undefined,
                 showError: true,
             });
+
+            console.log('response product detail', response);
 
             const productData = extractProductData(response);
 
@@ -776,7 +827,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                         <ProductDescription description={product.description} />
 
                         {/* Features */}
-                        <ProductFeatures />
+                        <ProductFeatures productType={product.product_type} />
 
                         {/* Info Grid */}
                         <ProductInfoGrid product={product} />
