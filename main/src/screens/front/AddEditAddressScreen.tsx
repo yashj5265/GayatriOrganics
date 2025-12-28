@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -50,8 +50,11 @@ const ADDRESS_TYPES: readonly AddressTypeOption[] = [
     { value: 'other', label: 'Other', icon: 'map-marker' },
 ];
 
+// Mobile number must start with 6, 7, 8, or 9 (valid Indian mobile numbers)
+// Cannot start with 0, 1, 2, 3, 4, or 5
 const MOBILE_REGEX = /^[6-9]\d{9}$/;
 const PINCODE_REGEX = /^\d{6}$/;
+const MOBILE_MAX_LENGTH = 10;
 
 // ============================================================================
 // CUSTOM HOOKS
@@ -63,9 +66,9 @@ const useAddressForm = (mode: 'add' | 'edit', address?: Address) => {
         mobile: '',
         addressLine1: '',
         addressLine2: '',
-        city: '',
-        state: '',
-        pincode: '',
+        city: 'Panna',
+        state: 'Madhya Pradesh',
+        pincode: '488333',
         landmark: '',
         addressType: 'home',
         isDefault: false,
@@ -80,9 +83,9 @@ const useAddressForm = (mode: 'add' | 'edit', address?: Address) => {
                 mobile: address.mobile,
                 addressLine1: address.addressLine1,
                 addressLine2: address.addressLine2 || '',
-                city: address.city,
-                state: address.state,
-                pincode: address.pincode,
+                city: 'Panna', // Fixed value - service area
+                state: 'Madhya Pradesh', // Fixed value - service area
+                pincode: '488333', // Fixed value - service area
                 landmark: address.landmark || '',
                 addressType: address.addressType,
                 isDefault: address.isDefault,
@@ -91,6 +94,10 @@ const useAddressForm = (mode: 'add' | 'edit', address?: Address) => {
     }, [mode, address]);
 
     const updateField = useCallback((field: keyof FormData, value: any) => {
+        // Limit mobile number to 10 digits
+        if (field === 'mobile' && value.length > MOBILE_MAX_LENGTH) {
+            value = value.slice(0, MOBILE_MAX_LENGTH);
+        }
         setFormData(prev => ({ ...prev, [field]: value }));
         if (errors[field]) {
             setErrors(prev => ({ ...prev, [field]: '' }));
@@ -106,27 +113,18 @@ const useAddressForm = (mode: 'add' | 'edit', address?: Address) => {
 
         if (!formData.mobile.trim()) {
             newErrors.mobile = 'Mobile number is required';
+        } else if (formData.mobile.length !== 10) {
+            newErrors.mobile = 'Mobile number must be exactly 10 digits';
         } else if (!MOBILE_REGEX.test(formData.mobile)) {
-            newErrors.mobile = 'Please enter a valid 10-digit mobile number';
+            newErrors.mobile = 'Mobile number must start with 6, 7, 8, or 9';
         }
 
         if (!formData.addressLine1.trim()) {
             newErrors.addressLine1 = 'Address line 1 is required';
         }
 
-        if (!formData.city.trim()) {
-            newErrors.city = 'City is required';
-        }
-
-        if (!formData.state.trim()) {
-            newErrors.state = 'State is required';
-        }
-
-        if (!formData.pincode.trim()) {
-            newErrors.pincode = 'Pincode is required';
-        } else if (!PINCODE_REGEX.test(formData.pincode)) {
-            newErrors.pincode = 'Please enter a valid 6-digit pincode';
-        }
+        // City, State, and Pincode are fixed values (service area)
+        // No validation needed as they are always set to default values
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -198,6 +196,69 @@ const AddressTypeSelector: React.FC<AddressTypeSelectorProps> = React.memo(({
 });
 
 // ============================================================================
+// MOBILE NUMBER INPUT COMPONENT
+// ============================================================================
+
+interface MobileNumberInputProps {
+    value: string;
+    onChangeText: (text: string) => void;
+    errorText?: string;
+}
+
+const MobileNumberInput: React.FC<MobileNumberInputProps> = React.memo(({
+    value,
+    onChangeText,
+    errorText,
+}) => {
+    const colors = useTheme();
+    const styles = useMemo(() => createMobileInputStyles(colors), [colors]);
+
+    const handleTextChange = useCallback((text: string) => {
+        // Only allow digits and limit to 10 digits
+        const digitsOnly = text.replace(/[^0-9]/g, '').slice(0, MOBILE_MAX_LENGTH);
+
+        // Prevent numbers starting with 0, 1, 2, 3, 4, or 5
+        if (digitsOnly.length > 0) {
+            const firstDigit = parseInt(digitsOnly[0], 10);
+            // If first digit is invalid (0-5), reject the entire input
+            if (firstDigit >= 0 && firstDigit <= 5) {
+                // Don't update if first digit is invalid
+                return;
+            }
+        }
+
+        onChangeText(digitsOnly);
+    }, [onChangeText]);
+
+    return (
+        <View style={styles.container}>
+            <View style={styles.inputWrapper}>
+                {/* Country Code Prefix */}
+                <View style={styles.countryCodeContainer}>
+                    <Text style={styles.countryCodeText}>+91</Text>
+                </View>
+
+                {/* Mobile Number Input */}
+                <View style={styles.inputContainer}>
+                    <AppTextInput
+                        label="Mobile Number *"
+                        value={value}
+                        onChangeText={handleTextChange}
+                        keyboardType="number-pad"
+                        errorText={errorText}
+                        specialCharactersNotAllowed
+                        maxLength={MOBILE_MAX_LENGTH}
+                        backgroundColor={colors.backgroundPrimary}
+                        topLevelBackGroundColor={colors.backgroundSecondary}
+                        showCrossButton={false}
+                    />
+                </View>
+            </View>
+        </View>
+    );
+});
+
+// ============================================================================
 // FORM SECTION COMPONENT
 // ============================================================================
 
@@ -227,15 +288,10 @@ const FormSection: React.FC<FormSectionProps> = React.memo(({
                 topLevelBackGroundColor={colors.backgroundSecondary}
             />
 
-            <AppTextInput
-                label="Mobile Number *"
+            <MobileNumberInput
                 value={formData.mobile}
                 onChangeText={(text) => onFieldChange('mobile', text)}
-                keyboardType="number-pad"
                 errorText={errors.mobile}
-                specialCharactersNotAllowed
-                backgroundColor={colors.backgroundPrimary}
-                topLevelBackGroundColor={colors.backgroundSecondary}
             />
 
             <AppTextInput
@@ -255,38 +311,54 @@ const FormSection: React.FC<FormSectionProps> = React.memo(({
                 topLevelBackGroundColor={colors.backgroundSecondary}
             />
 
+            {/* Service Area Information Banner */}
+            <View style={[styles.serviceInfoBanner, { backgroundColor: colors.themePrimary + '15', borderColor: colors.themePrimary + '30' }]}>
+                <View style={styles.serviceInfoContent}>
+                    <Icon name="information" size={20} color={colors.themePrimary} />
+                    <View style={styles.serviceInfoText}>
+                        <Text style={[styles.serviceInfoTitle, { color: colors.themePrimary }]}>
+                            Service Area
+                        </Text>
+                        <Text style={[styles.serviceInfoDescription, { color: colors.textDescription }]}>
+                            We currently deliver only in Panna, Madhya Pradesh (PIN: 488333). These fields are fixed for your convenience.
+                        </Text>
+                    </View>
+                </View>
+            </View>
+
             <View style={styles.row}>
                 <View style={styles.halfWidth}>
                     <AppTextInput
                         label="City *"
                         value={formData.city}
                         onChangeText={(text) => onFieldChange('city', text)}
-                        errorText={errors.city}
                         onlyAllowAlphabet
+                        editable={false}
                         backgroundColor={colors.backgroundPrimary}
                         topLevelBackGroundColor={colors.backgroundSecondary}
                     />
                 </View>
-                <View style={styles.halfWidth}>
-                    <AppTextInput
-                        label="State *"
-                        value={formData.state}
-                        onChangeText={(text) => onFieldChange('state', text)}
-                        errorText={errors.state}
-                        onlyAllowAlphabet
-                        backgroundColor={colors.backgroundPrimary}
-                        topLevelBackGroundColor={colors.backgroundSecondary}
-                    />
-                </View>
+
             </View>
 
+            <View style={styles.halfWidth}>
+                <AppTextInput
+                    label="State *"
+                    value={formData.state}
+                    onChangeText={(text) => onFieldChange('state', text)}
+                    onlyAllowAlphabet
+                    editable={false}
+                    backgroundColor={colors.backgroundPrimary}
+                    topLevelBackGroundColor={colors.backgroundSecondary}
+                />
+            </View>
             <AppTextInput
                 label="Pincode *"
                 value={formData.pincode}
                 onChangeText={(text) => onFieldChange('pincode', text)}
                 keyboardType="number-pad"
-                errorText={errors.pincode}
                 specialCharactersNotAllowed
+                editable={false}
                 backgroundColor={colors.backgroundPrimary}
                 topLevelBackGroundColor={colors.backgroundSecondary}
             />
@@ -432,8 +504,31 @@ const AddEditAddressScreen: React.FC<AddEditAddressScreenProps> = ({ navigation,
 
     const { mode, address } = route.params || { mode: 'add' };
     const [loading, setLoading] = useState(false);
+    const [keyboardHeight, setKeyboardHeight] = useState<number>(0);
 
     const { formData, errors, updateField, validateForm } = useAddressForm(mode, address);
+
+    // Keyboard listeners
+    useEffect(() => {
+        const keyboardWillShow = Keyboard.addListener(
+            Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+            (e) => {
+                setKeyboardHeight(e.endCoordinates.height);
+            }
+        );
+
+        const keyboardWillHide = Keyboard.addListener(
+            Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+            () => {
+                setKeyboardHeight(0);
+            }
+        );
+
+        return () => {
+            keyboardWillShow.remove();
+            keyboardWillHide.remove();
+        };
+    }, []);
 
     const handleSave = useCallback(async () => {
         if (!validateForm()) {
@@ -464,8 +559,8 @@ const AddEditAddressScreen: React.FC<AddEditAddressScreenProps> = ({ navigation,
     const styles = useMemo(() => createMainStyles(colors), [colors]);
     const scrollContentStyle = useMemo(() => ({
         ...styles.scrollContent,
-        paddingBottom: 32 + insets.bottom,
-    }), [styles.scrollContent, insets.bottom]);
+        paddingBottom: 16, // Reduced padding since buttons are outside
+    }), [styles.scrollContent]);
 
     return (
         <MainContainer
@@ -474,61 +569,79 @@ const AddEditAddressScreen: React.FC<AddEditAddressScreenProps> = ({ navigation,
             isInternetRequired={false}
             showLoader={loading}
         >
-            <View style={styles.container}>
-                {/* Header */}
-                <View style={styles.header}>
-                    <View style={styles.headerTop}>
-                        <AppTouchableRipple
-                            style={styles.backButton}
-                            onPress={() => navigation.goBack()}
-                        >
-                            <Icon name="arrow-left" size={24} color={colors.white} />
-                        </AppTouchableRipple>
-                        <Text style={styles.headerTitle}>
-                            {mode === 'add' ? 'Add New Address' : 'Edit Address'}
-                        </Text>
-                        <View style={styles.backButton} />
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={styles.keyboardView}
+            >
+                <View style={styles.container}>
+                    {/* Header */}
+                    <View style={styles.header}>
+                        <View style={styles.headerTop}>
+                            <AppTouchableRipple
+                                style={styles.backButton}
+                                onPress={() => navigation.goBack()}
+                            >
+                                <Icon name="arrow-left" size={24} color={colors.white} />
+                            </AppTouchableRipple>
+                            <Text style={styles.headerTitle}>
+                                {mode === 'add' ? 'Add New Address' : 'Edit Address'}
+                            </Text>
+                            <View style={styles.backButton} />
+                        </View>
+                    </View>
+
+                    {/* Scrollable Content */}
+                    <ScrollView
+                        style={styles.scrollView}
+                        contentContainerStyle={scrollContentStyle}
+                        showsVerticalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                    >
+                        {/* Address Type Selection */}
+                        <SectionCard icon="tag-outline" title="Address Type">
+                            <AddressTypeSelector
+                                selectedType={formData.addressType}
+                                onSelect={(type) => updateField('addressType', type)}
+                            />
+                        </SectionCard>
+
+                        {/* Form Fields */}
+                        <SectionCard icon="map-marker-outline" title="Address Details">
+                            <FormSection
+                                formData={formData}
+                                errors={errors}
+                                onFieldChange={updateField}
+                            />
+                        </SectionCard>
+                    </ScrollView>
+
+                    {/* Fixed Bottom Section - Above Keyboard */}
+                    <View style={[
+                        styles.fixedBottomSection,
+                        {
+                            paddingBottom: keyboardHeight > 0 ? 16 : insets.bottom + 16,
+                            backgroundColor: colors.backgroundPrimary,
+                        }
+                    ]}>
+                        {/* Set as Default */}
+                        <View style={styles.defaultCheckboxContainer}>
+                            <View style={[styles.sectionCardOverride, { backgroundColor: colors.backgroundSecondary }]}>
+                                <DefaultAddressCheckbox
+                                    isDefault={formData.isDefault}
+                                    onToggle={() => updateField('isDefault', !formData.isDefault)}
+                                />
+                            </View>
+                        </View>
+
+                        {/* Save Button */}
+                        <SaveButton
+                            mode={mode}
+                            loading={loading}
+                            onPress={handleSave}
+                        />
                     </View>
                 </View>
-
-                <ScrollView
-                    style={styles.scrollView}
-                    contentContainerStyle={scrollContentStyle}
-                    showsVerticalScrollIndicator={false}
-                >
-                    {/* Address Type Selection */}
-                    <SectionCard icon="tag-outline" title="Address Type">
-                        <AddressTypeSelector
-                            selectedType={formData.addressType}
-                            onSelect={(type) => updateField('addressType', type)}
-                        />
-                    </SectionCard>
-
-                    {/* Form Fields */}
-                    <SectionCard icon="map-marker-outline" title="Address Details">
-                        <FormSection
-                            formData={formData}
-                            errors={errors}
-                            onFieldChange={updateField}
-                        />
-                    </SectionCard>
-
-                    {/* Set as Default */}
-                    <SectionCard icon="" title="">
-                        <DefaultAddressCheckbox
-                            isDefault={formData.isDefault}
-                            onToggle={() => updateField('isDefault', !formData.isDefault)}
-                        />
-                    </SectionCard>
-
-                    {/* Save Button */}
-                    <SaveButton
-                        mode={mode}
-                        loading={loading}
-                        onPress={handleSave}
-                    />
-                </ScrollView>
-            </View>
+            </KeyboardAvoidingView>
         </MainContainer>
     );
 };
@@ -540,6 +653,9 @@ export default AddEditAddressScreen;
 // ============================================================================
 
 const createMainStyles = (colors: any) => StyleSheet.create({
+    keyboardView: {
+        flex: 1,
+    },
     container: {
         flex: 1,
         backgroundColor: colors.backgroundPrimary,
@@ -571,6 +687,30 @@ const createMainStyles = (colors: any) => StyleSheet.create({
     },
     scrollContent: {
         padding: 16,
+    },
+    fixedBottomSection: {
+        paddingHorizontal: 16,
+        paddingTop: 8,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(0, 0, 0, 0.05)',
+        elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+    },
+    defaultCheckboxContainer: {
+        marginBottom: 12,
+    },
+    sectionCardOverride: {
+        borderRadius: 16,
+        padding: 20,
+        backgroundColor: '#F5F5F5',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
     },
 });
 
@@ -647,6 +787,35 @@ const createAddressTypeStyles = (colors: any) => StyleSheet.create({
     },
 });
 
+const createMobileInputStyles = (colors: any) => StyleSheet.create({
+    container: {
+        marginBottom: 0,
+    },
+    inputWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    countryCodeContainer: {
+        height: 50,
+        width: 60,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: colors.border || '#E0E0E0',
+        backgroundColor: colors.backgroundSecondary || '#F5F5F5',
+    },
+    countryCodeText: {
+        fontSize: fonts.size.font15,
+        fontFamily: fonts.family.primaryBold,
+        color: colors.textPrimary,
+    },
+    inputContainer: {
+        flex: 1,
+    },
+});
+
 const createFormStyles = (colors: any) => StyleSheet.create({
     container: {
         gap: 16,
@@ -657,6 +826,31 @@ const createFormStyles = (colors: any) => StyleSheet.create({
     },
     halfWidth: {
         flex: 1,
+    },
+    serviceInfoBanner: {
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 8,
+        borderWidth: 1,
+    },
+    serviceInfoContent: {
+        flexDirection: 'row',
+        gap: 12,
+        alignItems: 'flex-start',
+    },
+    serviceInfoText: {
+        flex: 1,
+        gap: 4,
+    },
+    serviceInfoTitle: {
+        fontSize: fonts.size.font14,
+        fontFamily: fonts.family.primaryBold,
+        marginBottom: 2,
+    },
+    serviceInfoDescription: {
+        fontSize: fonts.size.font12,
+        fontFamily: fonts.family.secondaryRegular,
+        lineHeight: 18,
     },
 });
 

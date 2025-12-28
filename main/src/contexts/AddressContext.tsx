@@ -28,6 +28,7 @@ interface AddressContextType {
     deleteAddress: (id: string) => Promise<void>;
     selectAddress: (id: string) => Promise<void>;
     setDefaultAddress: (id: string) => Promise<void>;
+    searchAddressesByType: (type: 'Home' | 'Work' | 'Other') => Promise<Address[]>;
 }
 
 const AddressContext = createContext<AddressContextType | undefined>(undefined);
@@ -182,6 +183,8 @@ export const AddressProvider: React.FC<{ children: React.ReactNode }> = ({ child
                     showError: true,
                     showSuccess: false,
                 });
+
+                console.log('response add address', response);
 
                 if (response?.data) {
                     // Map API response to Address format
@@ -413,6 +416,73 @@ export const AddressProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
     }, [addresses, loadAddresses]);
 
+    const searchAddressesByType = useCallback(async (type: 'Home' | 'Work' | 'Other'): Promise<Address[]> => {
+        try {
+            const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
+
+            if (!token) {
+                // Fallback to local filtering if no token
+                return addresses.filter(addr => {
+                    const addrType = addr.addressType.charAt(0).toUpperCase() + addr.addressType.slice(1);
+                    return addrType === type;
+                });
+            }
+
+            // Call API to search addresses by type
+            const response = await ApiManager.get<AddressListModel>({
+                endpoint: constant.apiEndPoints.addressSearch,
+                params: { type: type },
+                token: token,
+                showError: false,
+            });
+
+            console.log('response address search by type', response);
+
+            // Handle response structure: ApiResponse wraps AddressListModel
+            let addressesData: AddressModel[] = [];
+
+            if (response?.data) {
+                // Check if data is AddressListModel (has nested data) or direct array
+                if (Array.isArray(response.data)) {
+                    // Direct array: { success, data: AddressModel[] }
+                    addressesData = response.data;
+                } else if (response.data.data && Array.isArray(response.data.data)) {
+                    // Nested: { success, data: { success, data: AddressModel[] } }
+                    addressesData = response.data.data;
+                }
+            }
+
+            if (addressesData && Array.isArray(addressesData) && addressesData.length > 0) {
+                // Map API response to Address format
+                const apiAddresses: Address[] = addressesData.map((addr: AddressModel) => ({
+                    id: addr.id.toString(),
+                    name: addr.full_name || '',
+                    mobile: addr.phone || '',
+                    addressLine1: addr.address || '',
+                    addressLine2: '',
+                    city: addr.city || '',
+                    state: addr.state || '',
+                    pincode: addr.pincode || '',
+                    landmark: '',
+                    addressType: (addr.address_type?.toLowerCase() || 'home') as 'home' | 'work' | 'other',
+                    isDefault: addr.is_default === 1,
+                }));
+
+                return apiAddresses;
+            }
+
+            // Return empty array if no addresses found
+            return [];
+        } catch (error) {
+            console.error('Error searching addresses by type:', error);
+            // Fallback to local filtering on error
+            return addresses.filter(addr => {
+                const addrType = addr.addressType.charAt(0).toUpperCase() + addr.addressType.slice(1);
+                return addrType === type;
+            });
+        }
+    }, [addresses]);
+
     const value = useMemo(() => ({
         addresses,
         selectedAddress,
@@ -422,7 +492,8 @@ export const AddressProvider: React.FC<{ children: React.ReactNode }> = ({ child
         deleteAddress,
         selectAddress,
         setDefaultAddress,
-    }), [addresses, selectedAddress, isLoading, addAddress, updateAddress, deleteAddress, selectAddress, setDefaultAddress]);
+        searchAddressesByType,
+    }), [addresses, selectedAddress, isLoading, addAddress, updateAddress, deleteAddress, selectAddress, setDefaultAddress, searchAddressesByType]);
 
     return (
         <AddressContext.Provider value={value}>
