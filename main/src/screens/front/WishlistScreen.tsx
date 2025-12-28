@@ -10,7 +10,7 @@ import { useWishlist, WishlistItem } from '../../contexts/WishlistContext';
 import { useCart } from '../../contexts/CardContext';
 import AppTouchableRipple from '../../components/AppTouchableRipple';
 import EmptyData, { EmptyDataType } from '../../components/EmptyData';
-import { ProductGridItem, ProductListItem } from '../../components/listItems';
+import { ProductGridItem, ProductListItem } from '../../listItems';
 import fonts from '../../styles/fonts';
 import constant from '../../utilities/constant';
 import { ProductDetailScreenProps } from './ProductDetailScreen';

@@ -9,7 +9,7 @@ import MainContainer from '../../container/MainContainer';
 import { useTheme } from '../../contexts/ThemeProvider';
 import AppTouchableRipple from '../../components/AppTouchableRipple';
 import EmptyData, { EmptyDataType } from '../../components/EmptyData';
-import { CategoryCard } from '../../components/listItems';
+import { CategoryCard } from '../../listItems';
 import VoiceSearchButton from '../../components/VoiceSearchButton';
 import VoiceSearchOverlay from '../../popups/VoiceSearchOverlay';
 import { useVoiceSearch } from '../../hooks/useVoiceSearch';
@@ -18,6 +18,7 @@ import StorageManager from '../../managers/StorageManager';
 import fonts from '../../styles/fonts';
 import constant from '../../utilities/constant';
 import { CategoryDetailScreenProps } from './CategoryDetailScreen';
+import { CategoryModel, CategoryListModel } from '../../dataModels/models';
 
 // ============================================================================
 // CONSTANTS
@@ -32,16 +33,6 @@ const SEARCH_INPUT_FOCUS_DELAY = 100;
 // ============================================================================
 interface CategoriesScreenProps {
     navigation: NativeStackNavigationProp<any>;
-}
-
-export interface Category {
-    id: number;
-    name: string;
-    description: string;
-    product_count: number;
-    image_url: string;
-    created_at: string;
-    updated_at: string;
 }
 
 interface CategoriesHeaderProps {
@@ -231,7 +222,7 @@ const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ navigation }) => {
     // ============================================================================
     // STATE
     // ============================================================================
-    const [categories, setCategories] = useState<Category[]>([]);
+    const [categories, setCategories] = useState<CategoryModel[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [refreshing, setRefreshing] = useState<boolean>(false);
     const [searchQuery, setSearchQuery] = useState<string>('');
@@ -267,13 +258,15 @@ const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ navigation }) => {
         try {
             const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
 
-            const response = await ApiManager.get({
+            const response = await ApiManager.get<CategoryListModel>({
                 endpoint: constant.apiEndPoints.allCategories,
                 token: token || undefined,
             });
 
+            console.log('response categories', response);
+
             // Handle different response formats
-            const categoryData =
+            const categoryData: CategoryModel[] =
                 response?.success && Array.isArray(response?.data)
                     ? response.data
                     : Array.isArray(response?.data)

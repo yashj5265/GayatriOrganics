@@ -1,10 +1,10 @@
 import React, { useState, useCallback, memo } from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import AppTouchableRipple from '../AppTouchableRipple';
-import { AppColors } from '../../styles/colors';
-import fonts from '../../styles/fonts';
-import { CategoryModel } from '../../dataModels/models';
+import AppTouchableRipple from '../components/AppTouchableRipple';
+import { AppColors } from '../styles/colors';
+import fonts from '../styles/fonts';
+import { CategoryModel } from '../dataModels/models';
 
 export interface CategoryCardProps {
     item: CategoryModel;

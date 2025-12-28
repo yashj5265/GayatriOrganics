@@ -10,7 +10,7 @@ import AppTouchableRipple from '../../components/AppTouchableRipple';
 import EmptyData, { EmptyDataType } from '../../components/EmptyData';
 import VoiceSearchButton from '../../components/VoiceSearchButton';
 import VoiceSearchOverlay from '../../popups/VoiceSearchOverlay';
-import { ProductGridItem } from '../../components/listItems';
+import { ProductGridItem } from '../../listItems';
 
 import { useTheme } from '../../contexts/ThemeProvider';
 import { useCart } from '../../contexts/CardContext';

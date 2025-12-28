@@ -10,7 +10,7 @@ import AppTouchableRipple from '../../components/AppTouchableRipple';
 import EmptyData, { EmptyDataType } from '../../components/EmptyData';
 import fonts from '../../styles/fonts';
 import constant from '../../utilities/constant';
-import { getImageUrl } from '../../components/listItems/utils';
+import { getImageUrl } from '../../listItems';
 
 // ============================================================================
 // CONSTANTS

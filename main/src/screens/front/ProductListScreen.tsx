@@ -11,7 +11,7 @@ import { useCart } from '../../contexts/CardContext';
 import { useWishlist } from '../../contexts/WishlistContext';
 import AppTouchableRipple from '../../components/AppTouchableRipple';
 import EmptyData, { EmptyDataType } from '../../components/EmptyData';
-import { ProductGridItem, ProductListItem } from '../../components/listItems';
+import { ProductGridItem, ProductListItem } from '../../listItems';
 import VoiceSearchButton from '../../components/VoiceSearchButton';
 import VoiceSearchOverlay from '../../popups/VoiceSearchOverlay';
 import { useVoiceSearch } from '../../hooks/useVoiceSearch';
