@@ -144,6 +144,7 @@ export interface CartResponseModel {
 // ============================================================================
 
 export interface CreateOrderDataModel {
+    id?: number; // Order ID (may be present in response)
     order_code: string;
     subtotal: number;
     delivery_charge: number;
@@ -156,4 +157,46 @@ export interface CreateOrderResponseModel {
     success: boolean;
     message: string;
     data: CreateOrderDataModel;
+}
+
+// Order Item Model (item within an order)
+export interface OrderItemModel {
+    id: number;
+    order_id: number;
+    product_id: number;
+    category_id: number;
+    quantity: number;
+    price: string;
+    unit_type: string;
+    created_at: string;
+    updated_at: string;
+    product: ProductModel;
+}
+
+// Order Model
+export interface OrderModel {
+    id: number;
+    order_code: string;
+    user_id: number;
+    address_id: number;
+    delivery_date: string;
+    delivery_charge: string;
+    subtotal: string;
+    total_amount: string;
+    status: string;
+    delivery_boy_id: number | null;
+    created_at: string;
+    updated_at: string;
+    delivery_otp: string | null;
+    otp_verified_at: string | null;
+    invoice_no: string | null;
+    invoice_generated_at: string | null;
+    items: OrderItemModel[];
+    address: AddressModel;
+}
+
+// Orders List Response Model
+export interface OrdersListResponseModel {
+    success: boolean;
+    data: OrderModel[];
 }

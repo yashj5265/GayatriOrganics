@@ -7,12 +7,13 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import MainContainer from '../../container/MainContainer';
 import { useTheme } from '../../contexts/ThemeProvider';
 import AppTouchableRipple from '../../components/AppTouchableRipple';
-import EmptyData from '../../components/EmptyData';
+import EmptyData, { EmptyDataType } from '../../components/EmptyData';
 import { OrderCard, Order, StatusInfo } from '../../listItems';
 import ApiManager from '../../managers/ApiManager';
 import StorageManager from '../../managers/StorageManager';
 import fonts from '../../styles/fonts';
 import constant from '../../utilities/constant';
+import { OrdersListResponseModel, OrderModel } from '../../dataModels/models';
 
 // ============================================================================
 // CONSTANTS
@@ -55,7 +56,7 @@ const getStatusInfo = (status: string, fallbackColor: string): StatusInfo => {
     const statusLower = status?.toLowerCase() || '';
 
     for (const [key, statusList] of Object.entries(ORDER_STATUS)) {
-        if (statusList.includes(statusLower as any)) {
+        if ((statusList as readonly string[]).includes(statusLower)) {
             const configKey = key.toLowerCase() as keyof typeof STATUS_CONFIG;
             return STATUS_CONFIG[configKey] || { label: status, color: fallbackColor, icon: 'help-circle' };
         }
@@ -65,15 +66,44 @@ const getStatusInfo = (status: string, fallbackColor: string): StatusInfo => {
 };
 
 
-const extractOrdersData = (response: any): Order[] => {
-    if (response?.data && Array.isArray(response.data)) {
-        return response.data;
+/**
+ * Maps OrderModel to Order interface for UI components
+ */
+const mapOrderModelToOrder = (orderModel: OrderModel): Order => ({
+    id: orderModel.id,
+    order_code: orderModel.order_code,
+    status: orderModel.status,
+    total_amount: orderModel.total_amount,
+    subtotal: orderModel.subtotal,
+    delivery_charge: orderModel.delivery_charge,
+    created_at: orderModel.created_at,
+    items_count: orderModel.items?.length || 0,
+    delivery_date: orderModel.delivery_date,
+    items: orderModel.items,
+    address: orderModel.address,
+});
+
+/**
+ * Extracts and transforms orders data from API response
+ */
+const extractOrdersData = (response: OrdersListResponseModel | any): Order[] => {
+    // Handle wrapped response from ApiManager
+    const ordersResponse: OrdersListResponseModel | undefined = response?.data && Array.isArray(response.data)
+        ? response as OrdersListResponseModel
+        : (response?.success && response?.data && Array.isArray(response.data))
+            ? response as OrdersListResponseModel
+            : undefined;
+
+    if (ordersResponse?.data && Array.isArray(ordersResponse.data)) {
+        return ordersResponse.data.map(mapOrderModelToOrder);
     }
+
+    // Fallback for other response formats
     if (response?.orders && Array.isArray(response.orders)) {
-        return response.orders;
+        return response.orders.map(mapOrderModelToOrder);
     }
     if (Array.isArray(response)) {
-        return response;
+        return response.map(mapOrderModelToOrder);
     }
     return [];
 };
@@ -112,7 +142,7 @@ const LoadingState = memo(() => {
 });
 
 const EmptyState = memo(() => {
-    return <EmptyData type="NO_DATA" message="No orders found" />;
+    return <EmptyData type={EmptyDataType.NO_RECORDS} message="No orders found" />;
 });
 
 const OrdersList = memo(({
@@ -171,7 +201,7 @@ const OrdersScreen: React.FC<OrdersScreenProps> = ({ navigation }) => {
         try {
             const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
 
-            const response = await ApiManager.get({
+            const response = await ApiManager.get<OrdersListResponseModel>({
                 endpoint: constant.apiEndPoints.myOrders,
                 token: token || undefined,
                 showError: true,

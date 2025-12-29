@@ -12,7 +12,7 @@ import ApiManager from '../../managers/ApiManager';
 import StorageManager from '../../managers/StorageManager';
 import fonts from '../../styles/fonts';
 import constant from '../../utilities/constant';
-import { CreateOrderResponseModel } from '../../dataModels/models';
+import { CreateOrderResponseModel, OrdersListResponseModel, OrderModel } from '../../dataModels/models';
 
 // ============================================================================
 // CONSTANTS
@@ -63,8 +63,15 @@ interface OrderSummaryProps {
 // ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
-const formatCurrency = (amount: number): string => {
-    return `₹${amount.toFixed(2)}`;
+const formatCurrency = (amount: number | string | undefined | null): string => {
+    if (amount === undefined || amount === null) {
+        return '₹0.00';
+    }
+    const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+    if (isNaN(numAmount)) {
+        return '₹0.00';
+    }
+    return `₹${numAmount.toFixed(2)}`;
 };
 
 const formatAddress = (address: Address): string => {
@@ -523,31 +530,67 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) => {
 
                             console.log('handlePlaceOrder response', response);
 
-                            // Handle both direct response and wrapped response
-                            // ApiManager returns ApiResponse<T>, so response.data is CreateOrderResponseModel
-                            const orderResponse: CreateOrderResponseModel | undefined = response?.data
-                                ? (response.data as CreateOrderResponseModel)
-                                : (response?.success ? response as unknown as CreateOrderResponseModel : undefined);
+                            // ApiManager returns the raw JSON response cast as ApiResponse<T>
+                            // The actual API response structure matches CreateOrderResponseModel
+                            // So response itself has success, message, and data properties
+                            const orderResponse = response as any as CreateOrderResponseModel;
 
                             if (orderResponse?.success && orderResponse?.data) {
                                 // Clear cart after successful order
-                                clearCart();
+                                await clearCart();
+
+                                // Get order ID if available in response
+                                let orderId = orderResponse.data.id;
+                                const orderCode = orderResponse.data.order_code;
+
+                                // If order ID is not in response, fetch orders list to find it
+                                if (!orderId) {
+                                    try {
+                                        const ordersResponse = await ApiManager.get<OrdersListResponseModel>({
+                                            endpoint: constant.apiEndPoints.myOrders,
+                                            token: token || undefined,
+                                            showError: false,
+                                        });
+
+                                        // Find the order by order_code
+                                        const orders = ordersResponse?.data || (ordersResponse as any)?.data?.data || [];
+                                        const foundOrder = Array.isArray(orders)
+                                            ? orders.find((order: OrderModel) => order.order_code === orderCode)
+                                            : null;
+
+                                        if (foundOrder) {
+                                            orderId = foundOrder.id;
+                                        }
+                                    } catch (error) {
+                                        console.error('❌ Error fetching orders:', error);
+                                        // Continue without orderId, will navigate to orders list
+                                    }
+                                }
 
                                 Alert.alert(
                                     'Order Placed Successfully!',
-                                    `Your order ${orderResponse.data.order_code} has been placed and will be delivered on ${orderResponse.data.delivery_date}.`,
+                                    `Your order ${orderCode} has been placed and will be delivered on ${orderResponse.data.delivery_date}.`,
                                     [
                                         {
                                             text: 'OK',
                                             onPress: () => {
-                                                navigation.navigate(constant.routeName.mainTabs, {
-                                                    screen: constant.routeName.orders,
-                                                });
+                                                if (orderId) {
+                                                    // Navigate directly to the order detail screen
+                                                    navigation.navigate(constant.routeName.orderDetail, {
+                                                        orderId: orderId,
+                                                    });
+                                                } else {
+                                                    // Fallback: navigate to orders list
+                                                    navigation.navigate(constant.routeName.mainTabs, {
+                                                        screen: constant.routeName.orders,
+                                                    });
+                                                }
                                             },
                                         },
                                     ]
                                 );
                             } else {
+                                console.error('❌ Invalid order response structure:', orderResponse);
                                 Alert.alert('Error', 'Failed to place order. Please try again.');
                             }
                         } catch (error: any) {

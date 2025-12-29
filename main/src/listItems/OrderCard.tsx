@@ -10,15 +10,21 @@ import fonts from '../styles/fonts';
 // ============================================================================
 export interface Order {
     id: number;
+    order_code?: string;
     order_number?: string;
     status: string;
-    total_amount?: number;
-    amount?: number;
+    total_amount?: number | string;
+    amount?: number | string;
     items_count?: number;
     created_at?: string;
     confirmation_code?: string;
     eta?: string;
     delivery_person_name?: string;
+    delivery_date?: string;
+    subtotal?: number | string;
+    delivery_charge?: number | string;
+    items?: any[];
+    address?: any;
 }
 
 export interface StatusInfo {
@@ -51,16 +57,35 @@ const formatDate = (dateString?: string): string => {
     }
 };
 
-const formatCurrency = (amount: number): string => {
-    return `₹${amount.toFixed(2)}`;
+const formatCurrency = (amount: number | string | undefined | null): string => {
+    if (amount === undefined || amount === null) {
+        return '₹0.00';
+    }
+    const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+    if (isNaN(numAmount)) {
+        return '₹0.00';
+    }
+    return `₹${numAmount.toFixed(2)}`;
 };
 
 const getOrderNumber = (order: Order): string => {
-    return order.order_number || `ORD${order.id}`;
+    return order.order_code || order.order_number || `ORD${order.id}`;
 };
 
-const getOrderAmount = (order: Order): number => {
-    return order.total_amount || order.amount || 0;
+const getOrderAmount = (order: Order): number | undefined => {
+    if (order.total_amount !== undefined && order.total_amount !== null) {
+        const amount = typeof order.total_amount === 'string' 
+            ? parseFloat(order.total_amount) 
+            : order.total_amount;
+        return isNaN(amount) ? undefined : amount;
+    }
+    if (order.amount !== undefined && order.amount !== null) {
+        const amount = typeof order.amount === 'string' 
+            ? parseFloat(order.amount) 
+            : order.amount;
+        return isNaN(amount) ? undefined : amount;
+    }
+    return undefined;
 };
 
 // ============================================================================
@@ -146,7 +171,7 @@ const OrderDetails = memo(({
     amount,
 }: {
     itemsCount: number;
-    amount: number;
+    amount: number | undefined;
 }) => {
     return (
         <View style={styles.orderDetails}>

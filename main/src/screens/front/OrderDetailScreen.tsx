@@ -11,6 +11,7 @@ import ApiManager from '../../managers/ApiManager';
 import StorageManager from '../../managers/StorageManager';
 import fonts from '../../styles/fonts';
 import constant from '../../utilities/constant';
+import { OrderModel } from '../../dataModels/models';
 
 // ============================================================================
 // CONSTANTS
@@ -48,26 +49,32 @@ interface OrderDetailScreenProps {
 interface OrderItem {
     product?: {
         name?: string;
+        image1?: string;
     };
     name?: string;
     quantity?: number;
-    price?: number;
+    price?: number | string;
+    unit_type?: string;
 }
 
 interface Order {
     id: number;
+    order_code?: string;
     order_number?: string;
     status: string;
-    total_amount?: number;
-    amount?: number;
+    total_amount?: number | string;
+    amount?: number | string;
+    subtotal?: number | string;
+    delivery_charge?: number | string;
     items?: OrderItem[];
     items_count?: number;
     created_at?: string;
+    delivery_date?: string;
     confirmation_code?: string;
     eta?: string;
     delivery_person_name?: string;
     delivery_person_phone?: string;
-    address?: string;
+    address?: any;
     full_address?: string;
     payment_mode?: string;
     customer_name?: string;
@@ -126,31 +133,110 @@ const formatDate = (dateString?: string): string => {
     }
 };
 
-const formatCurrency = (amount: number): string => {
-    return `₹${amount.toFixed(2)}`;
+const formatCurrency = (amount: number | string | undefined | null): string => {
+    if (amount === undefined || amount === null) {
+        return '₹0.00';
+    }
+    const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+    if (isNaN(numAmount)) {
+        return '₹0.00';
+    }
+    return `₹${numAmount.toFixed(2)}`;
 };
 
 const getOrderNumber = (order: Order): string => {
-    return order.order_number || `ORD${order.id}`;
+    return order.order_code || order.order_number || `ORD${order.id}`;
 };
 
-const getOrderAmount = (order: Order): number => {
-    return order.total_amount || order.amount || 0;
+const getOrderAmount = (order: Order): number | undefined => {
+    if (order.total_amount !== undefined && order.total_amount !== null) {
+        const amount = typeof order.total_amount === 'string' 
+            ? parseFloat(order.total_amount) 
+            : order.total_amount;
+        return isNaN(amount) ? undefined : amount;
+    }
+    if (order.amount !== undefined && order.amount !== null) {
+        const amount = typeof order.amount === 'string' 
+            ? parseFloat(order.amount) 
+            : order.amount;
+        return isNaN(amount) ? undefined : amount;
+    }
+    return undefined;
 };
 
 const calculateItemTotal = (item: OrderItem): number => {
-    return (item.quantity || 1) * (item.price || 0);
+    const quantity = item.quantity || 1;
+    const price = typeof item.price === 'string' ? parseFloat(item.price) : (item.price || 0);
+    return quantity * price;
 };
 
 const getItemName = (item: OrderItem): string => {
     return item.product?.name || item.name || 'Item';
 };
 
+/**
+ * Formats address object to string
+ */
+const formatAddressString = (address: any): string => {
+    if (!address) return '';
+    if (typeof address === 'string') return address;
+    
+    const parts: string[] = [];
+    if (address.address) parts.push(address.address);
+    if (address.city) parts.push(address.city);
+    if (address.state) parts.push(address.state);
+    if (address.pincode) parts.push(address.pincode);
+    
+    return parts.join(', ');
+};
+
+/**
+ * Maps OrderModel to Order interface for UI components
+ */
+const mapOrderModelToOrder = (orderModel: OrderModel): Order => ({
+    id: orderModel.id,
+    order_code: orderModel.order_code,
+    status: orderModel.status,
+    total_amount: orderModel.total_amount,
+    subtotal: orderModel.subtotal,
+    delivery_charge: orderModel.delivery_charge,
+    created_at: orderModel.created_at,
+    delivery_date: orderModel.delivery_date,
+    items_count: orderModel.items?.length || 0,
+    items: orderModel.items?.map(item => ({
+        product: {
+            name: item.product?.name,
+            image1: item.product?.image1,
+        },
+        name: item.product?.name,
+        quantity: item.quantity,
+        price: item.price,
+        unit_type: item.unit_type,
+    })),
+    address: orderModel.address,
+    customer_name: orderModel.address?.full_name,
+    customer_phone: orderModel.address?.phone,
+});
+
+/**
+ * Extracts and transforms order data from API response
+ */
 const extractOrderData = (response: any): Order | null => {
-    if (response?.data) return response.data;
-    if (response?.order) return response.order;
-    if (response && typeof response === 'object' && 'id' in response) {
-        return response as Order;
+    // Handle wrapped response from ApiManager
+    const orderModel: OrderModel | undefined = response?.data && response.data.id
+        ? (response.data as OrderModel)
+        : (response?.id ? response as OrderModel : undefined);
+
+    if (orderModel) {
+        return mapOrderModelToOrder(orderModel);
+    }
+
+    // Fallback for other response formats
+    if (response?.order && response.order.id) {
+        return mapOrderModelToOrder(response.order as OrderModel);
+    }
+    if (response && typeof response === 'object' && 'id' in response && 'order_code' in response) {
+        return mapOrderModelToOrder(response as OrderModel);
     }
     return null;
 };
@@ -432,7 +518,7 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ navigation, route
         try {
             const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
 
-            const response = await ApiManager.get({
+            const response = await ApiManager.get<OrderModel>({
                 endpoint: `${constant.apiEndPoints.getOrder}${orderId}`,
                 token: token || undefined,
                 showError: true,
@@ -530,7 +616,9 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ navigation, route
 
                     {/* Address Card */}
                     {(order.address || order.full_address) && (
-                        <AddressCard address={order.full_address || order.address || ''} />
+                        <AddressCard address={
+                            order.full_address || formatAddressString(order.address)
+                        } />
                     )}
 
                     {/* Order Items Card */}

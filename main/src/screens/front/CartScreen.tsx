@@ -63,8 +63,15 @@ interface BillDetailsProps {
 // ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
-const formatCurrency = (amount: number): string => {
-    return `₹${amount.toFixed(2)}`;
+const formatCurrency = (amount: number | string | undefined | null): string => {
+    if (amount === undefined || amount === null) {
+        return '₹0.00';
+    }
+    const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+    if (isNaN(numAmount)) {
+        return '₹0.00';
+    }
+    return `₹${numAmount.toFixed(2)}`;
 };
 
 const getItemWord = (count: number): string => {
