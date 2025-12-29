@@ -16,7 +16,7 @@ import { getImageUrl } from '../../listItems';
 // CONSTANTS
 // ============================================================================
 const DELIVERY_CHARGE = 30;
-const FREE_DELIVERY_THRESHOLD = 500;
+const FREE_DELIVERY_THRESHOLD = 200;
 const ESTIMATED_DELIVERY_TIME = '24-48 hours';
 const CURRENT_SAVINGS = 0;
 
@@ -25,7 +25,7 @@ const CURRENT_SAVINGS = 0;
 // ============================================================================
 interface CartScreenProps {
     navigation: NativeStackNavigationProp<any>;
-}
+};
 
 interface CartItemType {
     id: number;

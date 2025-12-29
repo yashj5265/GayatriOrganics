@@ -177,6 +177,7 @@ const OrdersScreen: React.FC<OrdersScreenProps> = ({ navigation }) => {
                 showError: true,
             });
 
+            console.log('fetchOrders response', response);
             const ordersData = extractOrdersData(response);
             setOrders(ordersData);
         } catch (error: any) {

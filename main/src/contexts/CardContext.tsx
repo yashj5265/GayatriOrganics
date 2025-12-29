@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import StorageManager, { StorageKey } from '../managers/StorageManager';
 import ApiManager from '../managers/ApiManager';
 import constant from '../utilities/constant';
+import { CartResponseModel, CartItemModel } from '../dataModels/models';
 
 // ============================================================================
 // TYPES
@@ -57,18 +58,18 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 /**
  * Maps API cart response to CartItem format
  */
-const mapApiResponseToCartItem = (apiItem: any): CartItem => ({
+const mapApiResponseToCartItem = (apiItem: CartItemModel): CartItem => ({
     id: apiItem.product_id || apiItem.product?.id || apiItem.id,
-    name: apiItem.product?.name || apiItem.name || '',
-    price: apiItem.price || 0,
+    name: apiItem.product?.name || '',
+    price: parseFloat(apiItem.price) || 0,
     quantity: apiItem.quantity || 0,
-    image: apiItem.product?.image || apiItem.image || '',
-    unit: apiItem.unit_type || apiItem.unit || '',
+    image: apiItem.product?.image1 || '',
+    unit: apiItem.unit_type || '',
     categoryId: apiItem.category_id || apiItem.category?.id,
     productId: apiItem.product_id || apiItem.product?.id,
-    cartItemId: apiItem.id || apiItem.cart_item_id,
-    deliveryCharge: apiItem.delivery_charge || apiItem.deliveryCharge,
-    deliveryDate: apiItem.delivery_date || apiItem.deliveryDate,
+    cartItemId: apiItem.id,
+    deliveryCharge: undefined,
+    deliveryDate: undefined,
 });
 
 /**
@@ -118,14 +119,19 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
                 const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
 
                 if (token) {
-                    const response = await ApiManager.get({
+                    const response = await ApiManager.get<CartResponseModel>({
                         endpoint: constant.apiEndPoints.getCart,
                         token,
                         showError: false,
                     });
 
-                    if (response?.data && Array.isArray(response.data)) {
-                        const apiCartItems = response.data.map(mapApiResponseToCartItem);
+                    // Handle both direct response and wrapped response
+                    const cartData: CartResponseModel | undefined = response?.items
+                        ? response as CartResponseModel
+                        : (response?.data as CartResponseModel | undefined);
+
+                    if (cartData?.items && Array.isArray(cartData.items)) {
+                        const apiCartItems = cartData.items.map(mapApiResponseToCartItem);
                         setCartItems(apiCartItems);
                         await StorageManager.setItem(CART_STORAGE_KEY, apiCartItems);
                         return;
@@ -182,15 +188,21 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
      */
     const fetchCartFromApi = useCallback(async (token: string): Promise<boolean> => {
         try {
-            const response = await ApiManager.get({
+            const response = await ApiManager.get<CartResponseModel>({
                 endpoint: constant.apiEndPoints.getCart,
                 token,
                 showError: false,
             });
 
             console.log('fetchCartFromApi response', response);
-            if (response?.data && Array.isArray(response.data)) {
-                const apiCartItems = response.data.map(mapApiResponseToCartItem);
+
+            // Handle both direct response and wrapped response
+            const cartData: CartResponseModel | undefined = response?.items
+                ? response as CartResponseModel
+                : (response?.data as CartResponseModel | undefined);
+
+            if (cartData?.items && Array.isArray(cartData.items)) {
+                const apiCartItems = cartData.items.map(mapApiResponseToCartItem);
                 setCartItems(apiCartItems);
                 await StorageManager.setItem(CART_STORAGE_KEY, apiCartItems);
                 return true;
@@ -358,6 +370,8 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
                     showError: true,
                     showSuccess: false,
                 });
+
+                console.log('updateQuantity response', response);
 
                 if (response?.data) {
                     await fetchCartFromApi(token);

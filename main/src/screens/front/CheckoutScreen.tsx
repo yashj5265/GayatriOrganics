@@ -12,6 +12,7 @@ import ApiManager from '../../managers/ApiManager';
 import StorageManager from '../../managers/StorageManager';
 import fonts from '../../styles/fonts';
 import constant from '../../utilities/constant';
+import { CreateOrderResponseModel } from '../../dataModels/models';
 
 // ============================================================================
 // CONSTANTS
@@ -510,7 +511,7 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) => {
                         try {
                             const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
 
-                            const response = await ApiManager.post({
+                            const response = await ApiManager.post<CreateOrderResponseModel>({
                                 endpoint: constant.apiEndPoints.createOrder,
                                 params: {
                                     address_id: selectedAddressId,
@@ -520,13 +521,21 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) => {
                                 showSuccess: true,
                             });
 
-                            if (response?.success || response?.data) {
+                            console.log('handlePlaceOrder response', response);
+
+                            // Handle both direct response and wrapped response
+                            // ApiManager returns ApiResponse<T>, so response.data is CreateOrderResponseModel
+                            const orderResponse: CreateOrderResponseModel | undefined = response?.data
+                                ? (response.data as CreateOrderResponseModel)
+                                : (response?.success ? response as unknown as CreateOrderResponseModel : undefined);
+
+                            if (orderResponse?.success && orderResponse?.data) {
                                 // Clear cart after successful order
                                 clearCart();
 
                                 Alert.alert(
                                     'Order Placed Successfully!',
-                                    'Your order has been placed and will be delivered soon.',
+                                    `Your order ${orderResponse.data.order_code} has been placed and will be delivered on ${orderResponse.data.delivery_date}.`,
                                     [
                                         {
                                             text: 'OK',

@@ -114,3 +114,46 @@ export interface AddressListModel {
     success: boolean;
     data: AddressModel[];
 };
+
+// ============================================================================
+// CART MODELS
+// ============================================================================
+
+export interface CartItemModel {
+    id: number;
+    user_id: number;
+    category_id: number;
+    product_id: number;
+    quantity: number;
+    unit_type: string;
+    price: string;
+    created_at: string;
+    updated_at: string;
+    product: ProductModel;
+    category: ProductCategoryModel;
+}
+
+export interface CartResponseModel {
+    success: boolean;
+    subtotal: number;
+    items: CartItemModel[];
+}
+
+// ============================================================================
+// ORDER MODELS
+// ============================================================================
+
+export interface CreateOrderDataModel {
+    order_code: string;
+    subtotal: number;
+    delivery_charge: number;
+    total_amount: number;
+    delivery_date: string;
+    status: string;
+}
+
+export interface CreateOrderResponseModel {
+    success: boolean;
+    message: string;
+    data: CreateOrderDataModel;
+}
