@@ -38,6 +38,7 @@ export default {
         getCart: '/api/cart',
         updateCart: '/api/cart/update', // Use with :id
         removeFromCart: '/api/cart/remove', // Use with :id
+        clearCart: '/api/cart/clear',
 
         // Orders
         createOrder: '/api/order/create-from-cart', // Create order from cart

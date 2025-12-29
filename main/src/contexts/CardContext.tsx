@@ -29,7 +29,7 @@ interface CartContextType {
     addToCart: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => void;
     removeFromCart: (itemId: number) => void;
     updateQuantity: (itemId: number, quantity: number) => void;
-    clearCart: () => void;
+    clearCart: () => Promise<void>;
     isInCart: (itemId: number) => boolean;
     getCartItem: (itemId: number) => CartItem | undefined;
 }
@@ -91,15 +91,14 @@ const validatePrice = (price: any): number => {
 
 /**
  * Builds API payload for cart operations
+ * Only includes: category_id, product_id, quantity, unit_type, price
  */
 const buildCartPayload = (item: any, quantity: number, itemPrice: number) => ({
     category_id: Number(item.categoryId),
     product_id: Number(item.productId),
     quantity: Number(quantity),
-    unit_type: String(item.unit || 'kg'),
+    unit_type: String(item.unit || item.unit_type || 'kg'),
     price: Number(itemPrice),
-    delivery_charge: Number(item.deliveryCharge || 0),
-    delivery_date: String(item.deliveryDate || new Date().toISOString().split('T')[0]),
 });
 
 // ============================================================================
@@ -189,6 +188,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
                 showError: false,
             });
 
+            console.log('fetchCartFromApi response', response);
             if (response?.data && Array.isArray(response.data)) {
                 const apiCartItems = response.data.map(mapApiResponseToCartItem);
                 setCartItems(apiCartItems);
@@ -384,8 +384,37 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     /**
      * Clears all items from cart
      */
-    const clearCart = useCallback(() => {
+    const clearCart = useCallback(async () => {
+        // Optimistically clear local state
         setCartItems([]);
+
+        try {
+            const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
+
+            if (token) {
+                await ApiManager.delete({
+                    endpoint: constant.apiEndPoints.clearCart,
+                    token,
+                    showError: true,
+                    showSuccess: false,
+                });
+
+                // Clear local storage
+                await StorageManager.removeItem(CART_STORAGE_KEY);
+            } else {
+                // If no token, just clear local storage
+                await StorageManager.removeItem(CART_STORAGE_KEY);
+            }
+        } catch (error) {
+            console.error('Error clearing cart via API:', error);
+            // Even if API fails, keep local state cleared
+            // User can refresh to get server state if needed
+            try {
+                await StorageManager.removeItem(CART_STORAGE_KEY);
+            } catch (storageError) {
+                console.error('Error clearing cart from storage:', storageError);
+            }
+        }
     }, []);
 
     /**

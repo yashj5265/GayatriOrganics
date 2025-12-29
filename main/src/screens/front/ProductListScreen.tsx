@@ -74,6 +74,7 @@ export interface Product {
     description: string;
     price: string;
     stock: number;
+    unit_type?: string;
     image1: string;
     image2: string | null;
     image3: string | null;
@@ -167,6 +168,7 @@ const extractProductsData = (response: ProductListModel | any): Product[] => {
             description: product.description,
             price: product.price,
             stock: stock,
+            unit_type: product.unit_type,
             image1: product.image1,
             image2: product.image2,
             image3: product.image3,
@@ -602,8 +604,10 @@ const ProductListScreen: React.FC<ProductListScreenNavigationProps> = ({
                 name: product.name,
                 price: parseFloat(product.price),
                 image: product.image1,
-                unit: 'pc',
+                unit: product.unit_type || 'kg',
                 quantity: 1,
+                categoryId: product.category_id || product.category?.id,
+                productId: product.id,
             });
         },
         [addToCart]

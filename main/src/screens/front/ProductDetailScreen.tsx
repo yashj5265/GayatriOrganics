@@ -69,6 +69,7 @@ export interface Product {
     price: string;
     stock: number;
     product_type?: string;
+    unit_type?: string;
     image1: string;
     image2: string | null;
     image3: string | null;
@@ -167,6 +168,7 @@ const extractProductData = (response: ProductDetailModel | any): Product | null 
         price: productData.price,
         stock: stock,
         product_type: productData.product_type,
+        unit_type: productData.unit_type,
         image1: productData.image1,
         image2: productData.image2,
         image3: productData.image3,
@@ -709,7 +711,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                 name: product.name,
                 price: parseFloat(product.price),
                 image: product.image1,
-                unit: 'pc',
+                unit: product.unit_type || 'kg',
                 quantity: quantity,
                 categoryId: product.category_id || product.category?.id,
                 productId: product.id,

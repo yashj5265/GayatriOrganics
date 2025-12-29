@@ -366,7 +366,7 @@ const ProductCard = memo(({ product, isInCart, onPress, onAddToCart }: ProductCa
     const imageUrl = product.image1 ? `${BASE_IMAGE_URL}${product.image1}` : null;
 
     return (
-        <AppTouchableRipple
+        <TouchableOpacity
             style={[styles.productCard, { backgroundColor: colors.backgroundSecondary }]}
             onPress={() => onPress(product)}
         >
@@ -420,7 +420,7 @@ const ProductCard = memo(({ product, isInCart, onPress, onAddToCart }: ProductCa
                     </Text>
                 </AppTouchableRipple>
             </View>
-        </AppTouchableRipple>
+        </TouchableOpacity>
     );
 });
 
@@ -618,6 +618,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                     description: p.description,
                     price: p.price,
                     stock: stock,
+                    unit_type: p.unit_type,
                     image1: p.image1,
                     image2: p.image2,
                     image3: p.image3,
@@ -717,7 +718,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                     name: product.name,
                     price: parseFloat(product.price),
                     image: product.image1,
-                    unit: 'pc',
+                    unit: product.unit_type || 'kg',
                     quantity: 1,
                     categoryId: product.category_id || product.category?.id,
                     productId: product.id,
