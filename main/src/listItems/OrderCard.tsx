@@ -23,6 +23,7 @@ export interface Order {
     delivery_date?: string;
     subtotal?: number | string;
     delivery_charge?: number | string;
+    delivery_otp?: string | null;
     items?: any[];
     address?: any;
 }
@@ -194,6 +195,27 @@ const ETAInfo = memo(({ eta }: { eta: string }) => {
     );
 });
 
+const OTPInfo = memo(({ otp }: { otp: string }) => {
+    const colors = useTheme();
+
+    return (
+        <View style={styles.otpContainer}>
+            <View style={styles.otpHeader}>
+                <Icon name="lock" size={16} color={colors.themePrimary} />
+                <Text style={[styles.otpLabel, { color: colors.textPrimary }]}>
+                    Delivery OTP:
+                </Text>
+            </View>
+            <Text style={[styles.otpValue, { color: colors.themePrimary }]}>
+                {otp}
+            </Text>
+            <Text style={[styles.otpHint, { color: colors.textLabel }]}>
+                Provide this OTP to the delivery person
+            </Text>
+        </View>
+    );
+});
+
 const ViewDetailsFooter = memo(() => {
     const colors = useTheme();
 
@@ -235,6 +257,11 @@ const OrderCard: React.FC<OrderCardProps> = memo(({ order, statusInfo, onPress }
 
             {/* ETA */}
             {order.eta && <ETAInfo eta={order.eta} />}
+
+            {/* OTP - Show when status is "out_for_delivery" */}
+            {order.status === 'out_for_delivery' && order.delivery_otp && (
+                <OTPInfo otp={order.delivery_otp} />
+            )}
 
             {/* Footer */}
             <ViewDetailsFooter />
@@ -326,6 +353,33 @@ const styles = StyleSheet.create({
     etaText: {
         fontSize: fonts.size.font13,
         fontFamily: fonts.family.primaryMedium,
+    },
+    otpContainer: {
+        marginTop: 12,
+        marginBottom: 12,
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#E0E0E0',
+    },
+    otpHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginBottom: 8,
+    },
+    otpLabel: {
+        fontSize: fonts.size.font13,
+        fontFamily: fonts.family.primaryMedium,
+    },
+    otpValue: {
+        fontSize: fonts.size.font20,
+        fontFamily: fonts.family.primaryBold,
+        letterSpacing: 4,
+        marginBottom: 4,
+    },
+    otpHint: {
+        fontSize: fonts.size.font11,
+        fontFamily: fonts.family.secondaryRegular,
     },
     viewDetails: {
         flexDirection: 'row',

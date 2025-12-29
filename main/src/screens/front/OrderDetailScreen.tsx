@@ -74,6 +74,7 @@ interface Order {
     eta?: string;
     delivery_person_name?: string;
     delivery_person_phone?: string;
+    delivery_otp?: string | null;
     address?: any;
     full_address?: string;
     payment_mode?: string;
@@ -107,7 +108,7 @@ const getStatusInfo = (status: string, fallbackColor: string): StatusInfo => {
 
     // Check each status category
     for (const [key, statusList] of Object.entries(ORDER_STATUS)) {
-        if (statusList.includes(statusLower as any)) {
+        if ((statusList as readonly string[]).includes(statusLower)) {
             const configKey = key.toLowerCase() as keyof typeof STATUS_CONFIG;
             return STATUS_CONFIG[configKey] || { label: status, color: fallbackColor, icon: 'help-circle' };
         }
@@ -150,14 +151,14 @@ const getOrderNumber = (order: Order): string => {
 
 const getOrderAmount = (order: Order): number | undefined => {
     if (order.total_amount !== undefined && order.total_amount !== null) {
-        const amount = typeof order.total_amount === 'string' 
-            ? parseFloat(order.total_amount) 
+        const amount = typeof order.total_amount === 'string'
+            ? parseFloat(order.total_amount)
             : order.total_amount;
         return isNaN(amount) ? undefined : amount;
     }
     if (order.amount !== undefined && order.amount !== null) {
-        const amount = typeof order.amount === 'string' 
-            ? parseFloat(order.amount) 
+        const amount = typeof order.amount === 'string'
+            ? parseFloat(order.amount)
             : order.amount;
         return isNaN(amount) ? undefined : amount;
     }
@@ -180,13 +181,13 @@ const getItemName = (item: OrderItem): string => {
 const formatAddressString = (address: any): string => {
     if (!address) return '';
     if (typeof address === 'string') return address;
-    
+
     const parts: string[] = [];
     if (address.address) parts.push(address.address);
     if (address.city) parts.push(address.city);
     if (address.state) parts.push(address.state);
     if (address.pincode) parts.push(address.pincode);
-    
+
     return parts.join(', ');
 };
 
@@ -216,6 +217,9 @@ const mapOrderModelToOrder = (orderModel: OrderModel): Order => ({
     address: orderModel.address,
     customer_name: orderModel.address?.full_name,
     customer_phone: orderModel.address?.phone,
+    delivery_person_name: orderModel.delivery_boy?.name,
+    delivery_person_phone: orderModel.delivery_boy?.mobile,
+    delivery_otp: orderModel.delivery_otp || undefined,
 });
 
 /**
@@ -387,6 +391,23 @@ const ConfirmationCodeCard = memo(({ code }: { code: string }) => {
     );
 });
 
+const DeliveryOTPCard = memo(({ otp }: { otp: string }) => {
+    const colors = useTheme();
+
+    return (
+        <InfoCard icon="lock" title="Delivery OTP">
+            <View style={styles.otpCodeContainer}>
+                <Text style={[styles.otpCode, { color: colors.themePrimary }]}>
+                    {otp}
+                </Text>
+                <Text style={[styles.otpHint, { color: colors.textDescription }]}>
+                    Please provide this OTP to the delivery person when your order arrives
+                </Text>
+            </View>
+        </InfoCard>
+    );
+});
+
 const ETACard = memo(({ eta }: { eta: string }) => {
     const colors = useTheme();
 
@@ -524,6 +545,7 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ navigation, route
                 showError: true,
             });
 
+            console.log('fetchOrderDetails response', response);
             const orderData = extractOrderData(response);
 
             if (orderData) {
@@ -605,6 +627,11 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ navigation, route
 
                     {/* ETA Card */}
                     {order.eta && <ETACard eta={order.eta} />}
+
+                    {/* Delivery OTP Card - Show when status is "out_for_delivery" */}
+                    {order.status === 'out_for_delivery' && order.delivery_otp && (
+                        <DeliveryOTPCard otp={order.delivery_otp} />
+                    )}
 
                     {/* Delivery Person Card */}
                     {order.delivery_person_name && (
@@ -741,12 +768,28 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
     },
     confirmationCode: {
-        fontSize: fonts.size.font32,
+        fontSize: fonts.size.font28,
         fontFamily: fonts.family.primaryBold,
         letterSpacing: 8,
         marginBottom: 8,
     },
     confirmationCodeHint: {
+        fontSize: fonts.size.font12,
+        fontFamily: fonts.family.secondaryRegular,
+        textAlign: 'center',
+        paddingHorizontal: 20,
+    },
+    otpCodeContainer: {
+        alignItems: 'center',
+        paddingVertical: 8,
+    },
+    otpCode: {
+        fontSize: fonts.size.font28,
+        fontFamily: fonts.family.primaryBold,
+        letterSpacing: 8,
+        marginBottom: 8,
+    },
+    otpHint: {
         fontSize: fonts.size.font12,
         fontFamily: fonts.family.secondaryRegular,
         textAlign: 'center',

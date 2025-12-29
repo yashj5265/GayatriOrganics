@@ -79,6 +79,7 @@ const mapOrderModelToOrder = (orderModel: OrderModel): Order => ({
     created_at: orderModel.created_at,
     items_count: orderModel.items?.length || 0,
     delivery_date: orderModel.delivery_date,
+    delivery_otp: orderModel.delivery_otp || undefined,
     items: orderModel.items,
     address: orderModel.address,
 });

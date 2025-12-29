@@ -173,6 +173,16 @@ export interface OrderItemModel {
     product: ProductModel;
 }
 
+// Delivery Boy Model
+export interface DeliveryBoyModel {
+    id: number;
+    name: string;
+    mobile: string;
+    otp_expires_at: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
 // Order Model
 export interface OrderModel {
     id: number;
@@ -193,6 +203,7 @@ export interface OrderModel {
     invoice_generated_at: string | null;
     items: OrderItemModel[];
     address: AddressModel;
+    delivery_boy?: DeliveryBoyModel | null;
 }
 
 // Orders List Response Model
