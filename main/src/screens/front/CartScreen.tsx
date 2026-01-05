@@ -11,6 +11,7 @@ import EmptyData, { EmptyDataType } from '../../components/EmptyData';
 import fonts from '../../styles/fonts';
 import constant from '../../utilities/constant';
 import { getImageUrl } from '../../listItems';
+import { formatUnitDisplay } from '../../components/listItems/utils';
 
 // ============================================================================
 // CONSTANTS
@@ -33,6 +34,7 @@ interface CartItemType {
     price: number;
     quantity: number;
     unit: string;
+    unitValue?: number;
     image?: string;
 }
 
@@ -210,6 +212,9 @@ const CartItemCard = memo(({
 }: CartItemCardProps) => {
     const colors = useTheme();
     const itemTotal = item.price * item.quantity;
+    const hasPackaging = item.unitValue && item.unitValue > 1;
+    const unitDisplay = formatUnitDisplay(item.unit, item.unitValue);
+    const perUnitPrice = hasPackaging ? item.price / item.unitValue! : item.price;
 
     return (
         <View
@@ -240,9 +245,27 @@ const CartItemCard = memo(({
                 <Text style={[styles.itemName, { color: colors.textPrimary }]}>
                     {item.name}
                 </Text>
-                <Text style={[styles.itemUnit, { color: colors.textLabel }]}>
-                    ₹{item.price} per {item.unit}
-                </Text>
+                
+                {/* Enhanced Unit Display */}
+                <View style={styles.priceInfoContainer}>
+                    {hasPackaging ? (
+                        <>
+                            <View style={[styles.packagePriceBadge, { backgroundColor: colors.themePrimaryLight }]}>
+                                <Icon name="package-variant-closed" size={12} color={colors.themePrimary} />
+                                <Text style={[styles.packagePriceText, { color: colors.themePrimary }]}>
+                                    ₹{item.price.toFixed(2)} per {unitDisplay}
+                                </Text>
+                            </View>
+                            <Text style={[styles.perUnitText, { color: colors.textDescription }]}>
+                                ₹{perUnitPrice.toFixed(2)} per {item.unit}
+                            </Text>
+                        </>
+                    ) : (
+                        <Text style={[styles.itemUnit, { color: colors.textLabel }]}>
+                            ₹{item.price.toFixed(2)} per {unitDisplay}
+                        </Text>
+                    )}
+                </View>
 
                 <QuantityControls
                     quantity={item.quantity}
@@ -254,9 +277,16 @@ const CartItemCard = memo(({
 
             {/* Item Right - Price & Remove */}
             <View style={styles.itemRight}>
-                <Text style={[styles.itemTotal, { color: colors.themePrimary }]}>
-                    ₹{itemTotal}
-                </Text>
+                <View style={styles.totalPriceContainer}>
+                    <Text style={[styles.itemTotal, { color: colors.themePrimary }]}>
+                        ₹{itemTotal.toFixed(2)}
+                    </Text>
+                    {hasPackaging && (
+                        <Text style={[styles.totalSubtext, { color: colors.textDescription }]}>
+                            {item.quantity} × ₹{item.price.toFixed(2)}
+                        </Text>
+                    )}
+                </View>
                 <AppTouchableRipple onPress={onRemove} style={styles.removeButton}>
                     <Icon name="delete-outline" size={22} color="#FF5252" />
                 </AppTouchableRipple>
@@ -753,6 +783,35 @@ const styles = StyleSheet.create({
         fontSize: fonts.size.font12,
         fontFamily: fonts.family.secondaryRegular,
         marginBottom: 8,
+    },
+    priceInfoContainer: {
+        marginBottom: 8,
+        gap: 4,
+    },
+    packagePriceBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        gap: 4,
+    },
+    packagePriceText: {
+        fontSize: fonts.size.font11,
+        fontFamily: fonts.family.primaryBold,
+    },
+    perUnitText: {
+        fontSize: fonts.size.font11,
+        fontFamily: fonts.family.secondaryRegular,
+    },
+    totalPriceContainer: {
+        alignItems: 'flex-end',
+    },
+    totalSubtext: {
+        fontSize: fonts.size.font10,
+        fontFamily: fonts.family.secondaryRegular,
+        marginTop: 2,
     },
     quantityContainer: {
         flexDirection: 'row',

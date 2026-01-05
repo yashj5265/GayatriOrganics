@@ -75,6 +75,7 @@ export interface Product {
     price: string;
     stock: number;
     unit_type?: string;
+    unit_value?: number;
     image1: string;
     image2: string | null;
     image3: string | null;
@@ -605,6 +606,7 @@ const ProductListScreen: React.FC<ProductListScreenNavigationProps> = ({
                 price: parseFloat(product.price),
                 image: product.image1,
                 unit: product.unit_type || 'kg',
+                unitValue: product.unit_value,
                 quantity: 1,
                 categoryId: product.category_id || product.category?.id,
                 productId: product.id,

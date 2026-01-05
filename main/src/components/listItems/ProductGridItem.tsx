@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppColors } from '../../styles/colors';
 import fonts from '../../styles/fonts';
-import { getImageUrl, getStockStatus } from './utils';
+import { getImageUrl, getStockStatus, formatUnitDisplay } from './utils';
 import { Product } from '../../screens/front/ProductListScreen';
 
 export interface ProductGridItemProps {
@@ -37,6 +37,15 @@ const ProductGridItem: React.FC<ProductGridItemProps> = memo(({ item, onPress, o
     }, [item, onToggleFavorite]);
 
     const productPrice = useMemo(() => parseFloat(item.price).toFixed(2), [item.price]);
+
+    // Format product name with unit information
+    const getProductNameWithUnit = useMemo((): string => {
+        if (item.unit_value && item.unit_value > 1 && item.unit_type) {
+            const unitDisplay = formatUnitDisplay(item.unit_type, item.unit_value);
+            return `${item.name} (${unitDisplay})`;
+        }
+        return item.name;
+    }, [item.name, item.unit_type, item.unit_value]);
 
     const cardStyle = useMemo(() => ({
         ...styles.gridCard,
@@ -93,7 +102,7 @@ const ProductGridItem: React.FC<ProductGridItemProps> = memo(({ item, onPress, o
                 </View>
 
                 <Text style={[styles.gridProductName, { color: colors.textPrimary }]} numberOfLines={2}>
-                    {item.name}
+                    {getProductNameWithUnit}
                 </Text>
 
                 <View style={[styles.stockStatus, { backgroundColor: stockStatus.bgColor }]}>
@@ -109,6 +118,11 @@ const ProductGridItem: React.FC<ProductGridItemProps> = memo(({ item, onPress, o
                         <Text style={[styles.gridPrice, { color: colors.themePrimary }]}>
                             ₹{productPrice}
                         </Text>
+                        {item.unit_type && (
+                            <Text style={[styles.unitText, { color: colors.textDescription }]}>
+                                Per {formatUnitDisplay(item.unit_type, item.unit_value)}
+                            </Text>
+                        )}
                     </View>
                     <TouchableOpacity
                         style={[
@@ -246,6 +260,11 @@ const styles = StyleSheet.create({
     gridPrice: {
         fontSize: fonts.size.font14,
         fontFamily: fonts.family.primaryBold,
+    },
+    unitText: {
+        fontSize: fonts.size.font8,
+        fontFamily: fonts.family.secondaryRegular,
+        marginTop: 2,
     },
     cartButton: {
         width: 32,

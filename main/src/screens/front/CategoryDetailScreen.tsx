@@ -45,6 +45,8 @@ export interface Product {
     description: string;
     price: string;
     stock: number;
+    unit_type?: string;
+    unit_value?: number;
     image1: string;
     category_id?: number;
     category?: {
@@ -184,6 +186,7 @@ const useCategoryProducts = (categoryId: number | undefined) => {
                             price: p.price,
                             stock: stock,
                             unit_type: p.unit_type,
+                            unit_value: p.unit_value,
                             image1: p.image1,
                             image2: p.image2,
                             image3: p.image3,
@@ -688,6 +691,7 @@ const CategoryDetailScreen: React.FC<CategoryDetailScreenNavigationProps> = ({ n
             price: parseFloat(product.price),
             image: product.image1,
             unit: product.unit_type || 'kg',
+            unitValue: product.unit_value,
             quantity: 1,
             categoryId: product.category_id || product.category?.id,
             productId: product.id,

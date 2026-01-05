@@ -4,7 +4,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import AppTouchableRipple from '../AppTouchableRipple';
 import { AppColors } from '../../styles/colors';
 import fonts from '../../styles/fonts';
-import { getImageUrl } from './utils';
+import { getImageUrl, formatUnitDisplay } from './utils';
 import { Product } from '../../screens/front/CategoryDetailScreen';
 
 export interface ProductCardProps {
@@ -53,6 +53,11 @@ const ProductCard: React.FC<ProductCardProps> = memo(({ product, onPress, colors
                 <Text style={[styles.productPrice, { color: colors.themePrimary }]}>
                     ₹{productPrice}
                 </Text>
+                {product.unit_type && (
+                    <Text style={[styles.unitText, { color: colors.textDescription }]}>
+                        Per {formatUnitDisplay(product.unit_type, product.unit_value)}
+                    </Text>
+                )}
                 {product.stock > 0 ? (
                     <Text style={[styles.productStock, { color: '#4CAF50' }]}>
                         In Stock
@@ -108,6 +113,11 @@ const styles = StyleSheet.create({
     productPrice: {
         fontSize: fonts.size.font16,
         fontFamily: fonts.family.primaryBold,
+        marginBottom: 2,
+    },
+    unitText: {
+        fontSize: fonts.size.font10,
+        fontFamily: fonts.family.secondaryRegular,
         marginBottom: 4,
     },
     productStock: {

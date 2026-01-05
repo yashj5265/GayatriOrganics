@@ -187,6 +187,7 @@ const WishlistScreen: React.FC<WishlistScreenNavigationProps> = ({ navigation })
                 price: parseFloat(product.price),
                 image: product.image1,
                 unit: product.unit_type || 'kg',
+                unitValue: product.unit_value,
                 quantity: 1,
                 categoryId: product.category_id || product.category?.id,
                 productId: product.id,

@@ -14,6 +14,7 @@ export interface WishlistItem {
     stock: number;
     description: string;
     unit_type?: string;
+    unit_value?: number;
 }
 
 interface WishlistContextType {

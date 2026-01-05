@@ -12,3 +12,23 @@ export const getStockStatus = (stock: number) => {
     return { label: 'In Stock', color: '#4CAF50', bgColor: '#E8F5E9' };
 };
 
+const UNIT_TYPE_SHORT: { [key: string]: string } = {
+    kg: 'kg',
+    g: 'g',
+    litre: 'L',
+    ml: 'ml',
+    piece: 'pc',
+    dozen: 'dz',
+    packet: 'pkt',
+};
+
+export const formatUnitDisplay = (unitType?: string, unitValue?: number): string => {
+    if (!unitType) return 'pc';
+    const normalizedUnitType = unitType.toLowerCase();
+    const short = UNIT_TYPE_SHORT[normalizedUnitType] || normalizedUnitType;
+    if (unitValue && unitValue > 1) {
+        return `${unitValue} ${short}`;
+    }
+    return short;
+};
+

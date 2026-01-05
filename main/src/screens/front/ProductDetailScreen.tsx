@@ -53,7 +53,7 @@ const STOCK_STATUS_CONFIG = {
 } as const;
 
 const PRODUCT_FEATURES = [
-    { icon: 'leaf', title: 'Organic Product', description: 'Certified organic product', requiresOrganic: true },
+    { icon: 'leaf', title: '100% Organic', description: 'Certified organic product', requiresOrganic: true },
     { icon: 'truck-fast', title: 'Fast Delivery', description: 'Same day delivery available', requiresOrganic: false },
     { icon: 'shield-check', title: 'Quality Assured', description: 'Freshness guaranteed', requiresOrganic: false },
 ] as const;
@@ -79,6 +79,7 @@ export interface Product {
     stock: number;
     product_type?: string;
     unit_type?: string;
+    unit_value?: number;
     image1: string;
     image2: string | null;
     image3: string | null;
@@ -115,6 +116,15 @@ const getUnitTypeInfo = (unitType?: string): UnitTypeInfo => {
     if (!unitType) return UNIT_TYPE_CONFIG.piece;
     const normalizedUnitType = unitType.toLowerCase();
     return UNIT_TYPE_CONFIG[normalizedUnitType as keyof typeof UNIT_TYPE_CONFIG] || UNIT_TYPE_CONFIG.piece;
+};
+
+const formatUnitDisplay = (unitType?: string, unitValue?: number): string => {
+    if (!unitType) return 'pc';
+    const unitInfo = getUnitTypeInfo(unitType);
+    if (unitValue && unitValue > 1) {
+        return `${unitValue} ${unitInfo.short}`;
+    }
+    return unitInfo.short;
 };
 
 const getImageUrl = (imagePath: string): string => {
@@ -161,6 +171,7 @@ const extractProductData = (response: ProductDetailModel | any): Product | null 
         stock: stock,
         product_type: productData.product_type,
         unit_type: productData.unit_type,
+        unit_value: productData.unit_value,
         image1: productData.image1,
         image2: productData.image2,
         image3: productData.image3,
@@ -314,14 +325,77 @@ const CategoryBadge = memo(({ categoryName, onPress }: { categoryName: string; o
     );
 });
 
-const UnitTypeBadge = memo(({ unitTypeInfo }: { unitTypeInfo: UnitTypeInfo }) => {
+// ⭐ NEW: Unit Information Card
+const UnitInformationCard = memo(({
+    unitTypeInfo,
+    unitValue
+}: {
+    unitTypeInfo: UnitTypeInfo;
+    unitValue?: number;
+}) => {
     const colors = useTheme();
+    const hasPackaging = unitValue && unitValue > 1;
+    const pluralLabel = hasPackaging && unitTypeInfo.label !== 'Piece'
+        ? `${unitTypeInfo.label}s`
+        : unitTypeInfo.label;
+
+    return (
+        <View style={[styles.unitInfoCard, { backgroundColor: colors.backgroundSecondary }]}>
+            <View style={[styles.unitIconContainer, { backgroundColor: colors.themePrimaryLight }]}>
+                <Icon name={unitTypeInfo.icon} size={28} color={colors.themePrimary} />
+            </View>
+
+            <View style={styles.unitInfoContent}>
+                <Text style={[styles.unitInfoLabel, { color: colors.textLabel }]}>
+                    PACKAGE SIZE
+                </Text>
+
+                {hasPackaging ? (
+                    <View style={styles.unitValueContainer}>
+                        <Text style={[styles.unitValueLarge, { color: colors.themePrimary }]}>
+                            {unitValue}
+                        </Text>
+                        <Text style={[styles.unitValueUnit, { color: colors.textPrimary }]}>
+                            {pluralLabel}
+                        </Text>
+                    </View>
+                ) : (
+                    <Text style={[styles.unitValueSingle, { color: colors.textPrimary }]}>
+                        1 {unitTypeInfo.label}
+                    </Text>
+                )}
+
+                {hasPackaging && (
+                    <View style={[styles.packageBadge, { backgroundColor: colors.themePrimaryLight }]}>
+                        <Icon name="package-variant-closed" size={14} color={colors.themePrimary} />
+                        <Text style={[styles.packageBadgeText, { color: colors.themePrimary }]}>
+                            PACKAGED PRODUCT
+                        </Text>
+                    </View>
+                )}
+            </View>
+        </View>
+    );
+});
+
+// Compact badge for status row
+const UnitTypeBadge = memo(({
+    unitTypeInfo,
+    unitValue
+}: {
+    unitTypeInfo: UnitTypeInfo;
+    unitValue?: number;
+}) => {
+    const colors = useTheme();
+    const displayText = unitValue && unitValue > 1
+        ? `${unitValue} ${unitTypeInfo.short}`
+        : unitTypeInfo.short;
 
     return (
         <View style={[styles.unitTypeBadge, { backgroundColor: colors.backgroundSecondary }]}>
-            <Icon name={unitTypeInfo.icon} size={18} color={colors.themePrimary} />
-            <Text style={[styles.unitTypeText, { color: colors.textPrimary }]}>
-                {unitTypeInfo.label}
+            <Icon name={unitTypeInfo.icon} size={14} color={colors.themePrimary} />
+            <Text style={[styles.unitTypeText, { color: colors.textPrimary }]} numberOfLines={1}>
+                {displayText}
             </Text>
         </View>
     );
@@ -332,7 +406,7 @@ const StockStatusBadge = memo(({ stockStatus, stock }: { stockStatus: StockStatu
         <View style={[styles.stockStatusBadge, { backgroundColor: stockStatus.bgColor }]}>
             <Icon name={stockStatus.icon} size={16} color={stockStatus.color} />
             <Text style={[styles.stockStatusText, { color: stockStatus.color }]}>
-                {stockStatus.label} • {stock} units available
+                {stockStatus.label} • {stock} units
             </Text>
         </View>
     );
@@ -351,6 +425,15 @@ const ProductHeader = memo(({
 }) => {
     const colors = useTheme();
 
+    // Format product name with unit information
+    const getProductNameWithUnit = (): string => {
+        if (product.unit_value && product.unit_value > 1 && product.unit_type) {
+            const unitDisplay = formatUnitDisplay(product.unit_type, product.unit_value);
+            return `${product.name} (${unitDisplay})`;
+        }
+        return product.name;
+    };
+
     return (
         <>
             <View style={styles.badgeContainer}>
@@ -365,11 +448,11 @@ const ProductHeader = memo(({
                 )}
             </View>
             <Text style={[styles.productName, { color: colors.textPrimary }]}>
-                {product.name}
+                {getProductNameWithUnit()}
             </Text>
             <View style={styles.statusContainer}>
                 <StockStatusBadge stockStatus={stockStatus} stock={product.stock} />
-                <UnitTypeBadge unitTypeInfo={unitTypeInfo} />
+                <UnitTypeBadge unitTypeInfo={unitTypeInfo} unitValue={product.unit_value} />
             </View>
         </>
     );
@@ -414,31 +497,52 @@ const QuantitySelector = memo(({
     );
 });
 
+// ⭐ ENHANCED: Price Section
 const PriceSection = memo(({
     price,
     quantity,
     maxStock,
     unitTypeInfo,
+    unitValue,
     onQuantityChange
 }: {
     price: string;
     quantity: number;
     maxStock: number;
     unitTypeInfo: UnitTypeInfo;
+    unitValue?: number;
     onQuantityChange: (change: number) => void;
 }) => {
     const colors = useTheme();
+    const hasPackaging = unitValue && unitValue > 1;
+
+    const packagePrice = parseFloat(price);
+    const perUnitPrice = hasPackaging ? packagePrice / unitValue! : packagePrice;
 
     return (
         <View style={styles.priceSection}>
-            <View>
-                <Text style={[styles.priceLabel, { color: colors.textLabel }]}>Price</Text>
+            <View style={styles.pricingDetails}>
+                <Text style={[styles.priceLabel, { color: colors.textLabel }]}>
+                    {hasPackaging ? 'Package Price' : 'Price'}
+                </Text>
                 <Text style={[styles.price, { color: colors.themePrimary }]}>
                     {formatPrice(price)}
                 </Text>
-                <Text style={[styles.priceSubtext, { color: colors.textDescription }]}>
-                    Per {unitTypeInfo.label.toLowerCase()}
-                </Text>
+
+                {hasPackaging && (
+                    <View style={[styles.perUnitBreakdown, { backgroundColor: colors.themePrimaryLight }]}>
+                        <Icon name="calculator-variant" size={14} color={colors.themePrimary} />
+                        <Text style={[styles.perUnitText, { color: colors.themePrimary }]}>
+                            ₹{perUnitPrice.toFixed(2)} per {unitTypeInfo.short}
+                        </Text>
+                    </View>
+                )}
+
+                {!hasPackaging && (
+                    <Text style={[styles.priceSubtext, { color: colors.textDescription }]}>
+                        Per {unitTypeInfo.short}
+                    </Text>
+                )}
             </View>
 
             <QuantitySelector
@@ -516,7 +620,6 @@ const FeatureItem = memo(({
 const ProductFeatures = memo(({ productType }: { productType?: string }) => {
     const colors = useTheme();
 
-    // Filter features based on product type
     const filteredFeatures = PRODUCT_FEATURES.filter((feature) => {
         if (feature.requiresOrganic) {
             return productType === 'organic';
@@ -666,16 +769,10 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
     const { addToCart, isInCart, updateQuantity, getCartItem } = useCart();
     const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
 
-    // ============================================================================
-    // STATE
-    // ============================================================================
     const [product, setProduct] = useState<Product | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [quantity, setQuantity] = useState<number>(1);
 
-    // ============================================================================
-    // COMPUTED VALUES
-    // ============================================================================
     const productImages = useMemo(() => (product ? extractProductImages(product) : []), [product]);
     const stockStatus = useMemo(() => (product ? getStockStatus(product.stock) : null), [product]);
     const unitTypeInfo = useMemo(() => getUnitTypeInfo(product?.unit_type), [product?.unit_type]);
@@ -694,9 +791,6 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
         [insets.bottom]
     );
 
-    // ============================================================================
-    // API HANDLERS
-    // ============================================================================
     const fetchProductDetail = useCallback(async () => {
         setLoading(true);
         try {
@@ -708,13 +802,10 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                 showError: true,
             });
 
-            console.log('response product detail', response);
-
             const productData = extractProductData(response);
 
             if (productData) {
                 setProduct(productData);
-                console.log("productData", productData);
             } else {
                 Alert.alert('Error', 'Product not found');
                 navigation.goBack();
@@ -728,9 +819,6 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
         }
     }, [productId, navigation]);
 
-    // ============================================================================
-    // EFFECTS
-    // ============================================================================
     useEffect(() => {
         fetchProductDetail();
     }, [fetchProductDetail]);
@@ -744,9 +832,6 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
         }
     }, [product, isInCart, getCartItem]);
 
-    // ============================================================================
-    // HANDLERS
-    // ============================================================================
     const handleAddToCart = useCallback(() => {
         if (!product || product.stock === 0) return;
 
@@ -769,6 +854,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                 price: parseFloat(product.price),
                 image: product.image1,
                 unit: product.unit_type || 'piece',
+                unitValue: product.unit_value,
                 quantity: quantity,
                 categoryId: product.category_id || product.category?.id,
                 productId: product.id,
@@ -811,6 +897,8 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                 category: product.category,
                 stock: product.stock,
                 description: product.description,
+                unit_type: product.unit_type,
+                unit_value: product.unit_value,
             });
         }
     }, [product, isInWishlist, addToWishlist, removeFromWishlist]);
@@ -832,16 +920,10 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
         navigation.goBack();
     }, [navigation]);
 
-    // ============================================================================
-    // RENDER - LOADING STATE
-    // ============================================================================
     if (loading || !product || !stockStatus) {
         return <LoadingState />;
     }
 
-    // ============================================================================
-    // RENDER - PRODUCT DETAILS
-    // ============================================================================
     return (
         <MainContainer
             statusBarColor="transparent"
@@ -854,7 +936,6 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={scrollContentStyle}
                 >
-                    {/* Image Carousel */}
                     <ImageCarousel
                         images={productImages}
                         onBack={handleGoBack}
@@ -862,9 +943,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                         onToggleFavorite={handleToggleFavorite}
                     />
 
-                    {/* Product Info Card */}
                     <View style={[styles.productInfoCard, { backgroundColor: colors.backgroundPrimary }]}>
-                        {/* Header */}
                         <ProductHeader
                             product={product}
                             stockStatus={stockStatus}
@@ -872,30 +951,28 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                             onCategoryPress={handleCategoryPress}
                         />
 
-                        {/* Price Section */}
+                        {/* ⭐ NEW: Unit Information Card */}
+                        <UnitInformationCard
+                            unitTypeInfo={unitTypeInfo}
+                            unitValue={product.unit_value}
+                        />
+
                         <PriceSection
                             price={product.price}
                             quantity={quantity}
                             maxStock={product.stock}
                             unitTypeInfo={unitTypeInfo}
+                            unitValue={product.unit_value}
                             onQuantityChange={handleQuantityChange}
                         />
 
-                        {/* Total Price */}
                         <TotalPriceCard totalPrice={totalPrice} />
-
-                        {/* Description */}
                         <ProductDescription description={product.description} />
-
-                        {/* Features */}
                         <ProductFeatures productType={product.product_type} />
-
-                        {/* Info Grid */}
                         <ProductInfoGrid product={product} />
                     </View>
                 </ScrollView>
 
-                {/* Bottom Action Bar */}
                 <BottomActionBar
                     totalPrice={totalPrice}
                     inCart={inCart}
@@ -913,15 +990,9 @@ export default memo(ProductDetailScreen);
 // STYLES
 // ============================================================================
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
-    scrollView: {
-        flex: 1,
-    },
-    scrollContent: {
-        paddingBottom: 100,
-    },
+    container: { flex: 1 },
+    scrollView: { flex: 1 },
+    scrollContent: { paddingBottom: 100 },
 
     // Image Carousel
     imageCarouselContainer: {
@@ -987,6 +1058,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 8,
         marginBottom: 12,
+        flexWrap: 'wrap',
     },
     categoryBadge: {
         flexDirection: 'row',
@@ -1025,6 +1097,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 8,
         marginBottom: 20,
+        flexWrap: 'wrap',
     },
     stockStatusBadge: {
         flexDirection: 'row',
@@ -1041,22 +1114,93 @@ const styles = StyleSheet.create({
     unitTypeBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 20,
-        gap: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 16,
+        gap: 4,
+        maxWidth: 100,
     },
     unitTypeText: {
-        fontSize: fonts.size.font13,
+        fontSize: fonts.size.font12,
         fontFamily: fonts.family.primaryBold,
+        flexShrink: 1,
     },
 
-    // Price Section
+    // ⭐ NEW: Unit Information Card
+    unitInfoCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        borderRadius: 16,
+        marginBottom: 20,
+        gap: 16,
+        elevation: 1,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+    },
+    unitIconContainer: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    unitInfoContent: {
+        flex: 1,
+    },
+    unitInfoLabel: {
+        fontSize: fonts.size.font11,
+        fontFamily: fonts.family.primaryBold,
+        marginBottom: 4,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    unitValueContainer: {
+        flexDirection: 'row',
+        alignItems: 'baseline',
+        gap: 6,
+    },
+    unitValueLarge: {
+        fontSize: fonts.size.font28,
+        fontFamily: fonts.family.primaryBold,
+        lineHeight: 32,
+    },
+    unitValueUnit: {
+        fontSize: fonts.size.font16,
+        fontFamily: fonts.family.primaryMedium,
+    },
+    unitValueSingle: {
+        fontSize: fonts.size.font20,
+        fontFamily: fonts.family.primaryBold,
+    },
+    packageBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        gap: 4,
+        marginTop: 6,
+    },
+    packageBadgeText: {
+        fontSize: fonts.size.font10,
+        fontFamily: fonts.family.primaryBold,
+        textTransform: 'uppercase',
+        letterSpacing: 0.3,
+    },
+
+    // ⭐ ENHANCED: Price Section
     priceSection: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
         marginBottom: 16,
+    },
+    pricingDetails: {
+        flex: 1,
     },
     priceLabel: {
         fontSize: fonts.size.font13,
@@ -1067,6 +1211,20 @@ const styles = StyleSheet.create({
         fontSize: fonts.size.font30,
         fontFamily: fonts.family.primaryBold,
         marginBottom: 4,
+    },
+    perUnitBreakdown: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 12,
+        alignSelf: 'flex-start',
+        marginTop: 8,
+    },
+    perUnitText: {
+        fontSize: fonts.size.font12,
+        fontFamily: fonts.family.primaryBold,
     },
     priceSubtext: {
         fontSize: fonts.size.font12,

@@ -16,6 +16,7 @@ export interface CartItem {
     quantity: number;
     image: string;
     unit: string;
+    unitValue?: number;
     categoryId?: number;
     productId?: number;
     cartItemId?: number;
@@ -65,6 +66,7 @@ const mapApiResponseToCartItem = (apiItem: CartItemModel): CartItem => ({
     quantity: apiItem.quantity || 0,
     image: apiItem.product?.image1 || '',
     unit: apiItem.unit_type || '',
+    unitValue: apiItem.product?.unit_value,
     categoryId: apiItem.category_id || apiItem.category?.id,
     productId: apiItem.product_id || apiItem.product?.id,
     cartItemId: apiItem.id,

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppColors } from '../../styles/colors';
 import fonts from '../../styles/fonts';
-import { getImageUrl, getStockStatus } from './utils';
+import { getImageUrl, getStockStatus, formatUnitDisplay } from './utils';
 import { Product } from '../../screens/front/ProductListScreen';
 
 export interface ProductListItemProps {
@@ -45,6 +45,15 @@ const ProductListItem: React.FC<ProductListItemProps> = memo(({
     }, [item, onToggleFavorite]);
 
     const productPrice = useMemo(() => parseFloat(item.price).toFixed(2), [item.price]);
+
+    // Format product name with unit information
+    const getProductNameWithUnit = useMemo((): string => {
+        if (item.unit_value && item.unit_value > 1 && item.unit_type) {
+            const unitDisplay = formatUnitDisplay(item.unit_type, item.unit_value);
+            return `${item.name} (${unitDisplay})`;
+        }
+        return item.name;
+    }, [item.name, item.unit_type, item.unit_value]);
 
     const cardStyle = useMemo(() => ({
         ...styles.listCard,
@@ -102,7 +111,7 @@ const ProductListItem: React.FC<ProductListItemProps> = memo(({
                     </View>
 
                     <Text style={[styles.listProductName, { color: colors.textPrimary }]} numberOfLines={1}>
-                        {item.name}
+                        {getProductNameWithUnit}
                     </Text>
 
                     <Text style={[styles.listDescription, { color: colors.textDescription }]} numberOfLines={2}>
@@ -115,6 +124,11 @@ const ProductListItem: React.FC<ProductListItemProps> = memo(({
                             <Text style={[styles.listPrice, { color: colors.themePrimary }]}>
                                 ₹{productPrice}
                             </Text>
+                            {item.unit_type && (
+                                <Text style={[styles.unitText, { color: colors.textDescription }]}>
+                                    Per {formatUnitDisplay(item.unit_type, item.unit_value)}
+                                </Text>
+                            )}
                         </View>
 
                         <View style={styles.listActions}>
@@ -256,6 +270,11 @@ const styles = StyleSheet.create({
     listPrice: {
         fontSize: fonts.size.font18,
         fontFamily: fonts.family.primaryBold,
+    },
+    unitText: {
+        fontSize: fonts.size.font9,
+        fontFamily: fonts.family.secondaryRegular,
+        marginTop: 2,
     },
     listActions: {
         flexDirection: 'row',
