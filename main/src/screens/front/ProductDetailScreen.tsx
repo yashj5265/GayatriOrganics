@@ -36,6 +36,16 @@ const IMAGE_HEIGHT = height * 0.45;
 const BASE_IMAGE_URL = 'https://gayatriorganicfarm.com/storage/';
 const DEFAULT_RATING = 4.8;
 
+const UNIT_TYPE_CONFIG = {
+    kg: { label: 'Kilogram', short: 'kg', icon: 'weight-kilogram' },
+    g: { label: 'Gram', short: 'g', icon: 'weight-gram' },
+    litre: { label: 'Litre', short: 'L', icon: 'cup-water' },
+    ml: { label: 'Millilitre', short: 'ml', icon: 'eyedropper' },
+    piece: { label: 'Piece', short: 'pc', icon: 'numeric-1-circle' },
+    dozen: { label: 'Dozen', short: 'dz', icon: 'numeric-12-circle' },
+    packet: { label: 'Packet', short: 'pkt', icon: 'package-variant' },
+} as const;
+
 const STOCK_STATUS_CONFIG = {
     OUT_OF_STOCK: { label: 'Out of Stock', color: '#FF5252', bgColor: '#FFEBEE', icon: 'close-circle' },
     LOW_STOCK: { label: 'Low Stock', color: '#FF9800', bgColor: '#FFF3E0', icon: 'alert-circle' },
@@ -43,10 +53,9 @@ const STOCK_STATUS_CONFIG = {
 } as const;
 
 const PRODUCT_FEATURES = [
-    { icon: 'leaf', title: '100% Organic', description: 'Certified organic product' },
-    { icon: 'truck-fast', title: 'Fast Delivery', description: 'Same day delivery available' },
-    { icon: 'shield-check', title: 'Quality Assured', description: 'Freshness guaranteed' },
-    { icon: 'cash-refund', title: 'Easy Returns', description: '7-day return policy' },
+    { icon: 'leaf', title: 'Organic Product', description: 'Certified organic product', requiresOrganic: true },
+    { icon: 'truck-fast', title: 'Fast Delivery', description: 'Same day delivery available', requiresOrganic: false },
+    { icon: 'shield-check', title: 'Quality Assured', description: 'Freshness guaranteed', requiresOrganic: false },
 ] as const;
 
 // ============================================================================
@@ -87,31 +96,10 @@ interface StockStatus {
     icon: string;
 }
 
-interface ImageCarouselProps {
-    images: string[];
-    onBack: () => void;
-    isFavorite: boolean;
-    onToggleFavorite: () => void;
-}
-
-interface ProductHeaderProps {
-    product: Product;
-    stockStatus: StockStatus;
-    onCategoryPress: () => void;
-}
-
-interface PriceSectionProps {
-    price: string;
-    quantity: number;
-    maxStock: number;
-    onQuantityChange: (change: number) => void;
-}
-
-interface BottomActionBarProps {
-    totalPrice: number;
-    inCart: boolean;
-    isOutOfStock: boolean;
-    onAddToCart: () => void;
+interface UnitTypeInfo {
+    label: string;
+    short: string;
+    icon: string;
 }
 
 // ============================================================================
@@ -121,6 +109,12 @@ const getStockStatus = (stock: number): StockStatus => {
     if (stock === 0) return STOCK_STATUS_CONFIG.OUT_OF_STOCK;
     if (stock <= 5) return STOCK_STATUS_CONFIG.LOW_STOCK;
     return STOCK_STATUS_CONFIG.IN_STOCK;
+};
+
+const getUnitTypeInfo = (unitType?: string): UnitTypeInfo => {
+    if (!unitType) return UNIT_TYPE_CONFIG.piece;
+    const normalizedUnitType = unitType.toLowerCase();
+    return UNIT_TYPE_CONFIG[normalizedUnitType as keyof typeof UNIT_TYPE_CONFIG] || UNIT_TYPE_CONFIG.piece;
 };
 
 const getImageUrl = (imagePath: string): string => {
@@ -149,10 +143,8 @@ const extractProductData = (response: ProductDetailModel | any): Product | null 
 
     if (!productData) return null;
 
-    // Transform ProductModel to Product (calculate stock from available_units)
     const stock = parseFloat(productData.available_units) || 0;
 
-    // Transform ProductCategoryModel to Category
     const category: Category = {
         id: productData.category.id,
         name: productData.category.name,
@@ -274,7 +266,12 @@ const FloatingButtons = memo(({
     );
 });
 
-const ImageCarousel = memo(({ images, onBack, isFavorite, onToggleFavorite }: ImageCarouselProps) => {
+const ImageCarousel = memo(({ images, onBack, isFavorite, onToggleFavorite }: {
+    images: string[];
+    onBack: () => void;
+    isFavorite: boolean;
+    onToggleFavorite: () => void;
+}) => {
     const colors = useTheme();
     const scrollX = useRef(new Animated.Value(0)).current;
 
@@ -317,6 +314,19 @@ const CategoryBadge = memo(({ categoryName, onPress }: { categoryName: string; o
     );
 });
 
+const UnitTypeBadge = memo(({ unitTypeInfo }: { unitTypeInfo: UnitTypeInfo }) => {
+    const colors = useTheme();
+
+    return (
+        <View style={[styles.unitTypeBadge, { backgroundColor: colors.backgroundSecondary }]}>
+            <Icon name={unitTypeInfo.icon} size={18} color={colors.themePrimary} />
+            <Text style={[styles.unitTypeText, { color: colors.textPrimary }]}>
+                {unitTypeInfo.label}
+            </Text>
+        </View>
+    );
+});
+
 const StockStatusBadge = memo(({ stockStatus, stock }: { stockStatus: StockStatus; stock: number }) => {
     return (
         <View style={[styles.stockStatusBadge, { backgroundColor: stockStatus.bgColor }]}>
@@ -328,16 +338,39 @@ const StockStatusBadge = memo(({ stockStatus, stock }: { stockStatus: StockStatu
     );
 });
 
-const ProductHeader = memo(({ product, stockStatus, onCategoryPress }: ProductHeaderProps) => {
+const ProductHeader = memo(({
+    product,
+    stockStatus,
+    unitTypeInfo,
+    onCategoryPress
+}: {
+    product: Product;
+    stockStatus: StockStatus;
+    unitTypeInfo: UnitTypeInfo;
+    onCategoryPress: () => void;
+}) => {
     const colors = useTheme();
 
     return (
         <>
-            <CategoryBadge categoryName={product.category.name} onPress={onCategoryPress} />
+            <View style={styles.badgeContainer}>
+                <CategoryBadge categoryName={product.category.name} onPress={onCategoryPress} />
+                {product.product_type === 'organic' && (
+                    <View style={[styles.organicBadge, { backgroundColor: '#E8F5E9' }]}>
+                        <Icon name="leaf" size={14} color="#4CAF50" />
+                        <Text style={[styles.organicBadgeText, { color: '#4CAF50' }]}>
+                            ORGANIC
+                        </Text>
+                    </View>
+                )}
+            </View>
             <Text style={[styles.productName, { color: colors.textPrimary }]}>
                 {product.name}
             </Text>
-            <StockStatusBadge stockStatus={stockStatus} stock={product.stock} />
+            <View style={styles.statusContainer}>
+                <StockStatusBadge stockStatus={stockStatus} stock={product.stock} />
+                <UnitTypeBadge unitTypeInfo={unitTypeInfo} />
+            </View>
         </>
     );
 });
@@ -381,7 +414,19 @@ const QuantitySelector = memo(({
     );
 });
 
-const PriceSection = memo(({ price, quantity, maxStock, onQuantityChange }: PriceSectionProps) => {
+const PriceSection = memo(({
+    price,
+    quantity,
+    maxStock,
+    unitTypeInfo,
+    onQuantityChange
+}: {
+    price: string;
+    quantity: number;
+    maxStock: number;
+    unitTypeInfo: UnitTypeInfo;
+    onQuantityChange: (change: number) => void;
+}) => {
     const colors = useTheme();
 
     return (
@@ -392,7 +437,7 @@ const PriceSection = memo(({ price, quantity, maxStock, onQuantityChange }: Pric
                     {formatPrice(price)}
                 </Text>
                 <Text style={[styles.priceSubtext, { color: colors.textDescription }]}>
-                    Per piece
+                    Per {unitTypeInfo.label.toLowerCase()}
                 </Text>
             </View>
 
@@ -471,9 +516,9 @@ const FeatureItem = memo(({
 const ProductFeatures = memo(({ productType }: { productType?: string }) => {
     const colors = useTheme();
 
-    // Filter features - only show "100% Organic" if product_type is "organic"
+    // Filter features based on product type
     const filteredFeatures = PRODUCT_FEATURES.filter((feature) => {
-        if (feature.title === '100% Organic') {
+        if (feature.requiresOrganic) {
             return productType === 'organic';
         }
         return true;
@@ -536,7 +581,17 @@ const ProductInfoGrid = memo(({ product }: { product: Product }) => {
     );
 });
 
-const BottomActionBar = memo(({ totalPrice, inCart, isOutOfStock, onAddToCart }: BottomActionBarProps) => {
+const BottomActionBar = memo(({
+    totalPrice,
+    inCart,
+    isOutOfStock,
+    onAddToCart
+}: {
+    totalPrice: number;
+    inCart: boolean;
+    isOutOfStock: boolean;
+    onAddToCart: () => void;
+}) => {
     const colors = useTheme();
     const insets = useSafeAreaInsets();
 
@@ -623,6 +678,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
     // ============================================================================
     const productImages = useMemo(() => (product ? extractProductImages(product) : []), [product]);
     const stockStatus = useMemo(() => (product ? getStockStatus(product.stock) : null), [product]);
+    const unitTypeInfo = useMemo(() => getUnitTypeInfo(product?.unit_type), [product?.unit_type]);
     const inCart = useMemo(() => (product ? isInCart(product.id) : false), [product, isInCart]);
     const isFavorite = useMemo(() => (product ? isInWishlist(product.id) : false), [product, isInWishlist]);
     const totalPrice = useMemo(() => {
@@ -658,6 +714,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
 
             if (productData) {
                 setProduct(productData);
+                console.log("productData", productData);
             } else {
                 Alert.alert('Error', 'Product not found');
                 navigation.goBack();
@@ -711,7 +768,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                 name: product.name,
                 price: parseFloat(product.price),
                 image: product.image1,
-                unit: product.unit_type || 'kg',
+                unit: product.unit_type || 'piece',
                 quantity: quantity,
                 categoryId: product.category_id || product.category?.id,
                 productId: product.id,
@@ -811,6 +868,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                         <ProductHeader
                             product={product}
                             stockStatus={stockStatus}
+                            unitTypeInfo={unitTypeInfo}
                             onCategoryPress={handleCategoryPress}
                         />
 
@@ -819,6 +877,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                             price={product.price}
                             quantity={quantity}
                             maxStock={product.stock}
+                            unitTypeInfo={unitTypeInfo}
                             onQuantityChange={handleQuantityChange}
                         />
 
@@ -923,18 +982,35 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingTop: 24,
     },
+    badgeContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 12,
+    },
     categoryBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        alignSelf: 'flex-start',
         paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 20,
         gap: 6,
-        marginBottom: 12,
     },
     categoryBadgeText: {
         fontSize: fonts.size.font12,
+        fontFamily: fonts.family.primaryBold,
+        textTransform: 'uppercase',
+    },
+    organicBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 20,
+        gap: 4,
+    },
+    organicBadgeText: {
+        fontSize: fonts.size.font11,
         fontFamily: fonts.family.primaryBold,
         textTransform: 'uppercase',
     },
@@ -944,17 +1020,33 @@ const styles = StyleSheet.create({
         marginBottom: 12,
         lineHeight: 36,
     },
+    statusContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 20,
+    },
     stockStatusBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        alignSelf: 'flex-start',
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderRadius: 20,
         gap: 8,
-        marginBottom: 20,
     },
     stockStatusText: {
+        fontSize: fonts.size.font13,
+        fontFamily: fonts.family.primaryBold,
+    },
+    unitTypeBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+        gap: 6,
+    },
+    unitTypeText: {
         fontSize: fonts.size.font13,
         fontFamily: fonts.family.primaryBold,
     },
