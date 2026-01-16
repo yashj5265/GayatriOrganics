@@ -32,40 +32,20 @@ const VOICE_SEARCH_LANGUAGE = 'en-US';
 const VOICE_SEARCH_DISPLAY_LANGUAGE = 'English (United States)';
 const BASE_IMAGE_URL = 'https://gayatriorganicfarm.com/storage/';
 
-const BANNERS: Banner[] = [
-    {
-        id: 1,
-        title: '🌿 100% Organic',
-        subtitle: 'Fresh from farm to your doorstep',
-        icon: '🌿',
-        backgroundColor: '#E8F5E9',
-        textColor: '#2E7D32',
-    },
-    {
-        id: 2,
-        title: '🚚 Free Delivery',
-        subtitle: 'On orders above ₹500',
-        icon: '🚚',
-        backgroundColor: '#E3F2FD',
-        textColor: '#1976D2',
-    },
-    {
-        id: 3,
-        title: '🎉 Special Offers',
-        subtitle: 'Get up to 30% off on selected items',
-        icon: '🎉',
-        backgroundColor: '#FFF3E0',
-        textColor: '#F57C00',
-    },
-    {
-        id: 4,
-        title: '💚 Farm Fresh',
-        subtitle: 'Directly from local organic farms',
-        icon: '💚',
-        backgroundColor: '#F1F8E9',
-        textColor: '#558B2F',
-    },
-];
+// Carousel API Response Interface
+interface CarouselItem {
+    id: number;
+    title: string;
+    subtitle: string;
+    image: string;
+    link: string;
+    link_type: string;
+    is_active: boolean;
+    position: number;
+    image_url: string;
+    created_at: string;
+    updated_at: string;
+}
 
 const CATEGORY_COLORS = ['#4caf50', '#ff9800', '#795548', '#2196f3', '#9c27b0', '#f44336'];
 
@@ -541,8 +521,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     const [showAddressModal, setShowAddressModal] = useState(false);
     const [categories, setCategories] = useState<CategoryModel[]>([]);
     const [featuredProducts, setFeaturedProducts] = useState<ProductListProduct[]>([]);
+    const [carousels, setCarousels] = useState<Banner[]>([]);
     const [categoriesLoading, setCategoriesLoading] = useState<boolean>(false);
     const [productsLoading, setProductsLoading] = useState<boolean>(false);
+    const [carouselsLoading, setCarouselsLoading] = useState<boolean>(false);
 
     // ============================================================================
     // EFFECTS
@@ -647,11 +629,59 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         }
     }, []);
 
+    // ============================================================================
+    // FETCH CAROUSELS
+    // ============================================================================
+    const fetchCarousels = useCallback(async () => {
+        setCarouselsLoading(true);
+        try {
+            const response = await ApiManager.get<CarouselItem[]>({
+                endpoint: '/api/carousels',
+                token: await StorageManager.getItem(constant.shareInstanceKey.authToken) || undefined,
+                showError: false,
+            });
+
+            const carouselData: CarouselItem[] =
+                response?.data && Array.isArray(response.data)
+                    ? response.data
+                    : response?.success && Array.isArray(response.data)
+                        ? response.data
+                        : [];
+
+            // Filter only active carousels and sort by position
+            const activeCarousels = carouselData
+                .filter((carousel) => carousel.is_active)
+                .sort((a, b) => a.position - b.position);
+
+            // Map API response to Banner format
+            const mappedBanners: Banner[] = activeCarousels.map((carousel) => ({
+                id: carousel.id,
+                title: carousel.title,
+                subtitle: carousel.subtitle,
+                image_url: carousel.image_url,
+                image: carousel.image,
+                link: carousel.link,
+                link_type: carousel.link_type,
+                backgroundColor: '#E8F5E9',
+                textColor: '#FFFFFF',
+            }));
+
+            setCarousels(mappedBanners);
+        } catch (error) {
+            console.error('Error fetching carousels:', error);
+            // Fallback to empty array on error
+            setCarousels([]);
+        } finally {
+            setCarouselsLoading(false);
+        }
+    }, []);
+
     useFocusEffect(
         useCallback(() => {
             fetchCategories();
             fetchFeaturedProducts();
-        }, [fetchCategories, fetchFeaturedProducts])
+            fetchCarousels();
+        }, [fetchCategories, fetchFeaturedProducts, fetchCarousels])
     );
 
     // ============================================================================
@@ -814,9 +844,45 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     // ============================================================================
     // BANNER HANDLERS
     // ============================================================================
-    const handleBannerPress = useCallback((banner: Banner) => {
-        // Handle banner press
-    }, []);
+    const handleBannerPress = useCallback(
+        (banner: Banner) => {
+            if (!banner.link || !banner.link_type) {
+                return;
+            }
+
+            try {
+                const linkId = parseInt(banner.link, 10);
+                if (isNaN(linkId)) {
+                    console.error('Invalid link ID:', banner.link);
+                    return;
+                }
+
+                switch (banner.link_type) {
+                    case 'category':
+                        // Navigate to category detail
+                        navigation.navigate(constant.routeName.categoryDetail, {
+                            params: {
+                                categoryId: linkId,
+                                categoryName: banner.title,
+                            },
+                        });
+                        break;
+                    case 'product':
+                        // Navigate to product detail
+                        navigation.navigate(constant.routeName.productDetail, {
+                            productId: linkId,
+                        });
+                        break;
+                    default:
+                        console.log('Unknown link type:', banner.link_type);
+                        break;
+                }
+            } catch (error) {
+                console.error('Error handling banner press:', error);
+            }
+        },
+        [navigation]
+    );
 
     // ============================================================================
     // RENDER
@@ -851,11 +917,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 />
 
                 {/* Banner Carousel */}
-                <BannerCarousel
-                    banners={BANNERS}
-                    colors={colors}
-                    onBannerPress={handleBannerPress}
-                />
+                {!carouselsLoading && carousels.length > 0 && (
+                    <BannerCarousel
+                        banners={carousels}
+                        colors={colors}
+                        onBannerPress={handleBannerPress}
+                    />
+                )}
 
                 {/* Categories Section */}
                 <CategoriesSection
