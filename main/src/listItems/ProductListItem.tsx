@@ -63,7 +63,7 @@ const ProductListItem: React.FC<ProductListItemProps> = memo(({
                         <Image
                             source={{ uri: getImageUrl(item.image1) }}
                             style={styles.listImage}
-                            resizeMode="cover"
+                            resizeMode='center'
                             onError={handleImageError}
                         />
                     ) : (

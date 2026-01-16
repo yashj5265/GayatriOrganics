@@ -9,7 +9,15 @@ import {
     Animated,
     TouchableOpacity,
     Alert,
+    Modal,
+    StatusBar,
 } from 'react-native';
+import {
+    PinchGestureHandler,
+    PanGestureHandler,
+    GestureHandlerRootView,
+    State,
+} from 'react-native-gesture-handler';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -53,7 +61,7 @@ const STOCK_STATUS_CONFIG = {
 } as const;
 
 const PRODUCT_FEATURES = [
-    { icon: 'leaf', title: '100% Organic', description: 'Certified organic product', requiresOrganic: true },
+    { icon: 'leaf', title: 'Organic Product', description: 'Certified organic product', requiresOrganic: true },
     { icon: 'truck-fast', title: 'Fast Delivery', description: 'Same day delivery available', requiresOrganic: false },
     { icon: 'shield-check', title: 'Quality Assured', description: 'Freshness guaranteed', requiresOrganic: false },
 ] as const;
@@ -186,11 +194,23 @@ const extractProductData = (response: ProductDetailModel | any): Product | null 
 // ============================================================================
 // SUB COMPONENTS
 // ============================================================================
-const ImageCard = memo(({ imageUrl, colors }: { imageUrl: string; colors: AppColors }) => {
+const ImageCard = memo(({
+    imageUrl,
+    colors,
+    onPress
+}: {
+    imageUrl: string;
+    colors: AppColors;
+    onPress?: () => void;
+}) => {
     const [imageError, setImageError] = useState(false);
 
     return (
-        <View style={styles.imageCard}>
+        <TouchableOpacity
+            style={styles.imageCard}
+            activeOpacity={0.9}
+            onPress={onPress}
+        >
             {!imageError ? (
                 <Image
                     source={{ uri: imageUrl }}
@@ -203,7 +223,7 @@ const ImageCard = memo(({ imageUrl, colors }: { imageUrl: string; colors: AppCol
                     <Icon name="image-off" size={64} color={colors.themePrimary} />
                 </View>
             )}
-        </View>
+        </TouchableOpacity>
     );
 });
 
@@ -277,6 +297,272 @@ const FloatingButtons = memo(({
     );
 });
 
+// Zoomable Image Component with Gesture Handlers
+const ZoomableImage = memo(({
+    imageUrl,
+    onZoomChange,
+    resetTrigger,
+}: {
+    imageUrl: string;
+    onZoomChange: (isZoomed: boolean) => void;
+    resetTrigger?: number;
+}) => {
+    const baseScale = useRef(new Animated.Value(1)).current;
+    const pinchScale = useRef(new Animated.Value(1)).current;
+    const scale = useRef(Animated.multiply(baseScale, pinchScale)).current;
+    const translateX = useRef(new Animated.Value(0)).current;
+    const translateY = useRef(new Animated.Value(0)).current;
+    const lastScale = useRef(1);
+    const lastTranslate = useRef({ x: 0, y: 0 });
+
+    // Reset zoom when resetTrigger changes
+    useEffect(() => {
+        if (resetTrigger !== undefined && resetTrigger > 0) {
+            lastScale.current = 1;
+            lastTranslate.current = { x: 0, y: 0 };
+            Animated.parallel([
+                Animated.spring(baseScale, {
+                    toValue: 1,
+                    useNativeDriver: true,
+                }),
+                Animated.spring(pinchScale, {
+                    toValue: 1,
+                    useNativeDriver: true,
+                }),
+                Animated.spring(translateX, {
+                    toValue: 0,
+                    useNativeDriver: true,
+                }),
+                Animated.spring(translateY, {
+                    toValue: 0,
+                    useNativeDriver: true,
+                }),
+            ]).start(() => {
+                translateX.setOffset(0);
+                translateY.setOffset(0);
+                translateX.flattenOffset();
+                translateY.flattenOffset();
+                onZoomChange(false);
+            });
+        }
+    }, [resetTrigger, baseScale, pinchScale, translateX, translateY, onZoomChange]);
+
+    const onPinchGestureEvent = Animated.event(
+        [{ nativeEvent: { scale: pinchScale } }],
+        {
+            useNativeDriver: true,
+            listener: (event: any) => {
+                const currentScale = lastScale.current * event.nativeEvent.scale;
+                if (currentScale > 1.1) {
+                    onZoomChange(true);
+                } else {
+                    onZoomChange(false);
+                }
+            }
+        }
+    );
+
+    const onPinchHandlerStateChange = (event: any) => {
+        if (event.nativeEvent.oldState === State.ACTIVE) {
+            lastScale.current *= event.nativeEvent.scale;
+            if (lastScale.current < 1) {
+                lastScale.current = 1;
+            }
+            if (lastScale.current > 5) {
+                lastScale.current = 5;
+            }
+            baseScale.setValue(lastScale.current);
+            pinchScale.setValue(1);
+
+            if (lastScale.current <= 1.1) {
+                translateX.setValue(0);
+                translateY.setValue(0);
+                translateX.setOffset(0);
+                translateY.setOffset(0);
+                translateX.flattenOffset();
+                translateY.flattenOffset();
+                lastTranslate.current = { x: 0, y: 0 };
+                onZoomChange(false);
+            }
+        }
+    };
+
+    const onPanGestureEvent = Animated.event(
+        [{ nativeEvent: { translationX: translateX, translationY: translateY } }],
+        { useNativeDriver: true }
+    );
+
+    const onPanHandlerStateChange = (event: any) => {
+        if (event.nativeEvent.oldState === State.BEGAN) {
+            // Store initial position when pan starts
+            translateX.setOffset(lastTranslate.current.x);
+            translateY.setOffset(lastTranslate.current.y);
+            translateX.setValue(0);
+            translateY.setValue(0);
+        } else if (event.nativeEvent.oldState === State.ACTIVE) {
+            // Update last position when pan ends
+            lastTranslate.current = {
+                x: lastTranslate.current.x + event.nativeEvent.translationX,
+                y: lastTranslate.current.y + event.nativeEvent.translationY,
+            };
+            translateX.flattenOffset();
+            translateY.flattenOffset();
+        }
+    };
+
+    const imageStyle = {
+        transform: [
+            { scale },
+            { translateX },
+            { translateY },
+        ],
+    };
+
+    return (
+        <View style={styles.zoomImageWrapper}>
+            <PinchGestureHandler
+                onGestureEvent={onPinchGestureEvent}
+                onHandlerStateChange={onPinchHandlerStateChange}
+                simultaneousHandlers={[]}
+            >
+                <Animated.View style={styles.zoomImageContainer}>
+                    <PanGestureHandler
+                        onGestureEvent={onPanGestureEvent}
+                        onHandlerStateChange={onPanHandlerStateChange}
+                        minPointers={1}
+                        maxPointers={1}
+                        enabled={lastScale.current > 1}
+                        simultaneousHandlers={[]}
+                        activeOffsetX={[-10, 10]}
+                        activeOffsetY={[-10, 10]}
+                        failOffsetX={[-1000, 1000]}
+                        failOffsetY={[-1000, 1000]}
+                    >
+                        <Animated.View style={styles.zoomImageContainer}>
+                            <Animated.Image
+                                source={{ uri: getImageUrl(imageUrl) }}
+                                style={[styles.zoomImage, imageStyle]}
+                                resizeMode="contain"
+                            />
+                        </Animated.View>
+                    </PanGestureHandler>
+                </Animated.View>
+            </PinchGestureHandler>
+        </View>
+    );
+});
+
+// Zoomable Image Viewer Modal
+const ZoomableImageViewer = memo(({
+    visible,
+    images,
+    initialIndex,
+    onClose,
+}: {
+    visible: boolean;
+    images: string[];
+    initialIndex: number;
+    onClose: () => void;
+}) => {
+    const colors = useTheme();
+    const [currentIndex, setCurrentIndex] = useState(initialIndex);
+    const [isZoomed, setIsZoomed] = useState(false);
+    const [resetTrigger, setResetTrigger] = useState(0);
+    const scrollViewRef = useRef<ScrollView>(null);
+
+    useEffect(() => {
+        if (visible && scrollViewRef.current) {
+            setTimeout(() => {
+                scrollViewRef.current?.scrollTo({
+                    x: currentIndex * width,
+                    animated: false,
+                });
+            }, 100);
+        }
+    }, [visible, currentIndex]);
+
+    useEffect(() => {
+        setCurrentIndex(initialIndex);
+    }, [initialIndex]);
+
+    const handleImageScroll = (event: any) => {
+        if (isZoomed) return;
+        const offsetX = event.nativeEvent.contentOffset.x;
+        const index = Math.round(offsetX / width);
+        if (index !== currentIndex && index >= 0 && index < images.length) {
+            setCurrentIndex(index);
+        }
+    };
+
+    const handleZoomChange = useCallback((zoomed: boolean) => {
+        setIsZoomed(zoomed);
+    }, []);
+
+    const handleReset = useCallback(() => {
+        setResetTrigger(prev => prev + 1);
+    }, []);
+
+    return (
+        <Modal
+            visible={visible}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={onClose}
+            statusBarTranslucent
+        >
+            <StatusBar hidden />
+            <GestureHandlerRootView style={styles.zoomModalContainer}>
+                {/* Header */}
+                <View style={styles.zoomHeader}>
+                    <Text style={styles.zoomHeaderText}>
+                        {currentIndex + 1} / {images.length}
+                    </Text>
+                    <TouchableOpacity
+                        style={[styles.zoomCloseButton, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
+                        onPress={onClose}
+                    >
+                        <Icon name="close" size={24} color="#FFFFFF" />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Zoomable Image ScrollView */}
+                <ScrollView
+                    ref={scrollViewRef}
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    onMomentumScrollEnd={handleImageScroll}
+                    scrollEventThrottle={16}
+                    decelerationRate="fast"
+                    snapToInterval={width}
+                    snapToAlignment="center"
+                    scrollEnabled={!isZoomed}
+                >
+                    {images.map((image, index) => (
+                        <ZoomableImage
+                            key={index}
+                            imageUrl={image}
+                            onZoomChange={index === currentIndex ? handleZoomChange : () => { }}
+                            resetTrigger={index === currentIndex ? resetTrigger : 0}
+                        />
+                    ))}
+                </ScrollView>
+
+                {/* Footer with zoom controls */}
+                <View style={styles.zoomFooter}>
+                    <TouchableOpacity
+                        style={[styles.zoomControlButton, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
+                        onPress={handleReset}
+                    >
+                        <Icon name="fit-to-screen" size={20} color="#FFFFFF" />
+                        <Text style={styles.zoomControlText}>Reset</Text>
+                    </TouchableOpacity>
+                </View>
+            </GestureHandlerRootView>
+        </Modal>
+    );
+});
+
 const ImageCarousel = memo(({ images, onBack, isFavorite, onToggleFavorite }: {
     images: string[];
     onBack: () => void;
@@ -285,26 +571,47 @@ const ImageCarousel = memo(({ images, onBack, isFavorite, onToggleFavorite }: {
 }) => {
     const colors = useTheme();
     const scrollX = useRef(new Animated.Value(0)).current;
+    const [zoomVisible, setZoomVisible] = useState(false);
+    const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+
+    const handleImagePress = useCallback((index: number) => {
+        setSelectedImageIndex(index);
+        setZoomVisible(true);
+    }, []);
 
     return (
-        <View style={styles.imageCarouselContainer}>
-            <ScrollView
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
-                    useNativeDriver: false,
-                })}
-                scrollEventThrottle={16}
-            >
-                {images.map((image, index) => (
-                    <ImageCard key={index} imageUrl={getImageUrl(image)} colors={colors} />
-                ))}
-            </ScrollView>
+        <>
+            <View style={styles.imageCarouselContainer}>
+                <ScrollView
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
+                        useNativeDriver: false,
+                    })}
+                    scrollEventThrottle={16}
+                >
+                    {images.map((image, index) => (
+                        <ImageCard
+                            key={index}
+                            imageUrl={getImageUrl(image)}
+                            colors={colors}
+                            onPress={() => handleImagePress(index)}
+                        />
+                    ))}
+                </ScrollView>
 
-            <ImageIndicators images={images} scrollX={scrollX} />
-            <FloatingButtons onBack={onBack} isFavorite={isFavorite} onToggleFavorite={onToggleFavorite} />
-        </View>
+                <ImageIndicators images={images} scrollX={scrollX} />
+                <FloatingButtons onBack={onBack} isFavorite={isFavorite} onToggleFavorite={onToggleFavorite} />
+            </View>
+
+            <ZoomableImageViewer
+                visible={zoomVisible}
+                images={images}
+                initialIndex={selectedImageIndex}
+                onClose={() => setZoomVisible(false)}
+            />
+        </>
     );
 });
 
@@ -401,12 +708,32 @@ const UnitTypeBadge = memo(({
     );
 });
 
-const StockStatusBadge = memo(({ stockStatus, stock }: { stockStatus: StockStatus; stock: number }) => {
+const StockStatusBadge = memo(({
+    stockStatus,
+    stock,
+    unitTypeInfo,
+    unitValue
+}: {
+    stockStatus: StockStatus;
+    stock: number;
+    unitTypeInfo: UnitTypeInfo;
+    unitValue?: number;
+}) => {
+    // Format stock display with unit type
+    const formatStockDisplay = (): string => {
+        if (unitValue && unitValue > 1) {
+            // Show as "15 × 2 kg" format for packages
+            return `${stock} × ${unitValue} ${unitTypeInfo.short}`;
+        }
+        // Show as "15 kg" for single unit products
+        return `${stock} ${unitTypeInfo.short}`;
+    };
+
     return (
         <View style={[styles.stockStatusBadge, { backgroundColor: stockStatus.bgColor }]}>
             <Icon name={stockStatus.icon} size={16} color={stockStatus.color} />
             <Text style={[styles.stockStatusText, { color: stockStatus.color }]}>
-                {stockStatus.label} • {stock} units
+                {stockStatus.label} • {formatStockDisplay()}
             </Text>
         </View>
     );
@@ -451,8 +778,13 @@ const ProductHeader = memo(({
                 {getProductNameWithUnit()}
             </Text>
             <View style={styles.statusContainer}>
-                <StockStatusBadge stockStatus={stockStatus} stock={product.stock} />
-                <UnitTypeBadge unitTypeInfo={unitTypeInfo} unitValue={product.unit_value} />
+                <StockStatusBadge
+                    stockStatus={stockStatus}
+                    stock={product.stock}
+                    unitTypeInfo={unitTypeInfo}
+                    unitValue={product.unit_value}
+                />
+                {/* <UnitTypeBadge unitTypeInfo={unitTypeInfo} unitValue={product.unit_value} /> */}
             </View>
         </>
     );
@@ -1395,5 +1727,77 @@ const styles = StyleSheet.create({
     addToCartText: {
         fontSize: fonts.size.font16,
         fontFamily: fonts.family.primaryBold,
+    },
+
+    // Zoom Modal Styles
+    zoomModalContainer: {
+        flex: 1,
+        backgroundColor: '#000000',
+    },
+    zoomHeader: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: 50,
+        paddingHorizontal: 20,
+        paddingBottom: 20,
+        zIndex: 10,
+    },
+    zoomHeaderText: {
+        fontSize: fonts.size.font16,
+        fontFamily: fonts.family.primaryBold,
+        color: '#FFFFFF',
+    },
+    zoomCloseButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    zoomImageWrapper: {
+        width: width,
+        height: height,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    zoomImageContainer: {
+        width: width,
+        height: height,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    zoomImage: {
+        width: width,
+        height: height,
+    },
+    zoomFooter: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingBottom: 40,
+        paddingTop: 20,
+        zIndex: 10,
+    },
+    zoomControlButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 20,
+        gap: 8,
+    },
+    zoomControlText: {
+        fontSize: fonts.size.font14,
+        fontFamily: fonts.family.primaryBold,
+        color: '#FFFFFF',
     },
 });
