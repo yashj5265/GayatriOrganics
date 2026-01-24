@@ -64,7 +64,7 @@ const CATEGORY_ICONS: Record<string, string> = {
 };
 
 const WHY_CHOOSE_US_FEATURES = [
-    { icon: '✅', text: '100% Organic Products' },
+    { icon: '✅', text: 'Organic Products' },
     { icon: '🚚', text: 'Fast Home Delivery' },
     { icon: '💰', text: 'Best Prices Guaranteed' },
 ];
