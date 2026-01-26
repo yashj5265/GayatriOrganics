@@ -6,6 +6,9 @@ import fonts from '../styles/fonts';
 import { getImageUrl, getStockStatus } from './utils';
 import { Product } from '../screens/front/ProductListScreen';
 
+// ============================================================================
+// TYPES
+// ============================================================================
 export interface ProductListItemProps {
     item: Product;
     onPress: (product: Product) => void;
@@ -16,6 +19,53 @@ export interface ProductListItemProps {
     isFavorite?: boolean;
 }
 
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+const formatPrice = (price: string | number): string => {
+    return `₹${parseFloat(price.toString()).toFixed(2)}`;
+};
+
+const shouldShowActualPrice = (actualPrice?: string, currentPrice?: string): boolean => {
+    if (!actualPrice || actualPrice === '0' || actualPrice === '0.00') return false;
+    if (!currentPrice) return false;
+    return parseFloat(actualPrice) !== parseFloat(currentPrice);
+};
+
+// ============================================================================
+// SUB-COMPONENTS
+// ============================================================================
+const PriceDisplay = memo(({
+    price,
+    actualPrice,
+    colors,
+}: {
+    price: string;
+    actualPrice?: string;
+    colors: AppColors;
+}) => {
+    const showActualPrice = shouldShowActualPrice(actualPrice, price);
+
+    return (
+        <View>
+            <Text style={[styles.priceLabel, { color: colors.textLabel }]}>Price</Text>
+            {showActualPrice && (
+                <Text style={[styles.actualPriceList, { color: colors.textGrey }]}>
+                    {formatPrice(actualPrice!)}
+                </Text>
+            )}
+            <Text style={[styles.listPrice, { color: colors.themePrimary }]}>
+                {formatPrice(price)}
+            </Text>
+        </View>
+    );
+});
+
+PriceDisplay.displayName = 'PriceDisplay';
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
 const ProductListItem: React.FC<ProductListItemProps> = memo(({
     item,
     onPress,
@@ -43,8 +93,6 @@ const ProductListItem: React.FC<ProductListItemProps> = memo(({
     const handleFavoritePress = useCallback(() => {
         onToggleFavorite?.(item);
     }, [item, onToggleFavorite]);
-
-    const productPrice = useMemo(() => parseFloat(item.price).toFixed(2), [item.price]);
 
     const cardStyle = useMemo(() => ({
         ...styles.listCard,
@@ -110,12 +158,11 @@ const ProductListItem: React.FC<ProductListItemProps> = memo(({
                     </Text>
 
                     <View style={styles.listFooter}>
-                        <View>
-                            <Text style={[styles.priceLabel, { color: colors.textLabel }]}>Price</Text>
-                            <Text style={[styles.listPrice, { color: colors.themePrimary }]}>
-                                ₹{productPrice}
-                            </Text>
-                        </View>
+                        <PriceDisplay
+                            price={item.price}
+                            actualPrice={item.actual_price}
+                            colors={colors}
+                        />
 
                         <View style={styles.listActions}>
                             <View style={[styles.stockStatus, { backgroundColor: stockStatus.bgColor }]}>
@@ -155,6 +202,9 @@ ProductListItem.displayName = 'ProductListItem';
 
 export default ProductListItem;
 
+// ============================================================================
+// STYLES
+// ============================================================================
 const styles = StyleSheet.create({
     listCard: {
         borderRadius: 16,
@@ -253,6 +303,12 @@ const styles = StyleSheet.create({
         fontFamily: fonts.family.secondaryRegular,
         marginBottom: 2,
     },
+    actualPriceList: {
+        fontSize: fonts.size.font12,
+        fontFamily: fonts.family.primaryMedium,
+        textDecorationLine: 'line-through',
+        marginBottom: 1,
+    },
     listPrice: {
         fontSize: fonts.size.font18,
         fontFamily: fonts.family.primaryBold,
@@ -288,4 +344,3 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
     },
 });
-

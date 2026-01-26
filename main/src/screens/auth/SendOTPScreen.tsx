@@ -184,8 +184,8 @@ const SendOTPScreen: React.FC<Props> = ({ navigation }) => {
                         <Text style={[styles.title, { color: colors.themePrimary }]}>
                             Welcome to
                         </Text>
-                        <Text style={[styles.appName, { color: colors.themePrimary }]}>
-                            Gayatri Organics 🌿
+                        <Text style={[styles.appName, { color: colors.themePrimary, textAlign: 'center' }]}>
+                            Gayatri Organic Farm 🌿
                         </Text>
                         <Text style={[styles.subtitle, { color: colors.textDescription }]}>
                             Enter your mobile number to continue

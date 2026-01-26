@@ -73,6 +73,7 @@ export interface Product {
     name: string;
     description: string;
     price: string;
+    actual_price?: string; // ★ ADDED
     stock: number;
     unit_type?: string;
     unit_value?: number;
@@ -168,8 +169,10 @@ const extractProductsData = (response: ProductListModel | any): Product[] => {
             name: product.name,
             description: product.description,
             price: product.price,
+            actual_price: product.actual_price, // ★ ADDED
             stock: stock,
             unit_type: product.unit_type,
+            unit_value: product.unit_value, // ★ ADDED
             image1: product.image1,
             image2: product.image2,
             image3: product.image3,

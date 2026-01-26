@@ -58,21 +58,29 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 
 /**
  * Maps API cart response to CartItem format
+ * Note: API returns total price (price * quantity), so we divide by quantity to get unit price
  */
-const mapApiResponseToCartItem = (apiItem: CartItemModel): CartItem => ({
-    id: apiItem.product_id || apiItem.product?.id || apiItem.id,
-    name: apiItem.product?.name || '',
-    price: parseFloat(apiItem.price) || 0,
-    quantity: apiItem.quantity || 0,
-    image: apiItem.product?.image1 || '',
-    unit: apiItem.unit_type || '',
-    unitValue: apiItem.product?.unit_value,
-    categoryId: apiItem.category_id || apiItem.category?.id,
-    productId: apiItem.product_id || apiItem.product?.id,
-    cartItemId: apiItem.id,
-    deliveryCharge: undefined,
-    deliveryDate: undefined,
-});
+const mapApiResponseToCartItem = (apiItem: CartItemModel): CartItem => {
+    const totalPrice = parseFloat(apiItem.price) || 0;
+    const quantity = apiItem.quantity || 1;
+    // Calculate unit price by dividing total price by quantity
+    const unitPrice = quantity > 0 ? totalPrice / quantity : totalPrice;
+
+    return {
+        id: apiItem.product_id || apiItem.product?.id || apiItem.id,
+        name: apiItem.product?.name || '',
+        price: unitPrice, // Store unit price, not total price
+        quantity: quantity,
+        image: apiItem.product?.image1 || '',
+        unit: apiItem.unit_type || '',
+        unitValue: apiItem.product?.unit_value,
+        categoryId: apiItem.category_id || apiItem.category?.id,
+        productId: apiItem.product_id || apiItem.product?.id,
+        cartItemId: apiItem.id,
+        deliveryCharge: undefined,
+        deliveryDate: undefined,
+    };
+};
 
 /**
  * Validates and normalizes price value

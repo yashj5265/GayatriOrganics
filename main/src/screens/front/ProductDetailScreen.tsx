@@ -43,6 +43,7 @@ const { width, height } = Dimensions.get('window');
 const IMAGE_HEIGHT = height * 0.45;
 const BASE_IMAGE_URL = 'https://gayatriorganicfarm.com/storage/';
 const DEFAULT_RATING = 4.8;
+const MAX_QUANTITY_PER_ITEM = 6;
 
 const UNIT_TYPE_CONFIG = {
     kg: { label: 'Kilogram', short: 'kg', icon: 'weight-kilogram' },
@@ -84,6 +85,7 @@ export interface Product {
     name: string;
     description: string;
     price: string;
+    actual_price?: string;
     stock: number;
     product_type?: string;
     unit_type?: string;
@@ -176,6 +178,7 @@ const extractProductData = (response: ProductDetailModel | any): Product | null 
         name: productData.name,
         description: productData.description,
         price: productData.price,
+        actual_price: productData.actual_price,
         stock: stock,
         product_type: productData.product_type,
         unit_type: productData.unit_type,
@@ -227,6 +230,8 @@ const ImageCard = memo(({
     );
 });
 
+ImageCard.displayName = 'ImageCard';
+
 const ImageIndicators = memo(({ images, scrollX }: { images: string[]; scrollX: Animated.Value }) => {
     const colors = useTheme();
 
@@ -265,6 +270,8 @@ const ImageIndicators = memo(({ images, scrollX }: { images: string[]; scrollX: 
     );
 });
 
+ImageIndicators.displayName = 'ImageIndicators';
+
 const FloatingButtons = memo(({
     onBack,
     isFavorite,
@@ -297,6 +304,8 @@ const FloatingButtons = memo(({
     );
 });
 
+FloatingButtons.displayName = 'FloatingButtons';
+
 // Zoomable Image Component with Gesture Handlers
 const ZoomableImage = memo(({
     imageUrl,
@@ -315,7 +324,6 @@ const ZoomableImage = memo(({
     const lastScale = useRef(1);
     const lastTranslate = useRef({ x: 0, y: 0 });
 
-    // Reset zoom when resetTrigger changes
     useEffect(() => {
         if (resetTrigger !== undefined && resetTrigger > 0) {
             lastScale.current = 1;
@@ -394,13 +402,11 @@ const ZoomableImage = memo(({
 
     const onPanHandlerStateChange = (event: any) => {
         if (event.nativeEvent.oldState === State.BEGAN) {
-            // Store initial position when pan starts
             translateX.setOffset(lastTranslate.current.x);
             translateY.setOffset(lastTranslate.current.y);
             translateX.setValue(0);
             translateY.setValue(0);
         } else if (event.nativeEvent.oldState === State.ACTIVE) {
-            // Update last position when pan ends
             lastTranslate.current = {
                 x: lastTranslate.current.x + event.nativeEvent.translationX,
                 y: lastTranslate.current.y + event.nativeEvent.translationY,
@@ -451,6 +457,8 @@ const ZoomableImage = memo(({
         </View>
     );
 });
+
+ZoomableImage.displayName = 'ZoomableImage';
 
 // Zoomable Image Viewer Modal
 const ZoomableImageViewer = memo(({
@@ -512,7 +520,6 @@ const ZoomableImageViewer = memo(({
         >
             <StatusBar hidden />
             <GestureHandlerRootView style={styles.zoomModalContainer}>
-                {/* Header */}
                 <View style={styles.zoomHeader}>
                     <Text style={styles.zoomHeaderText}>
                         {currentIndex + 1} / {images.length}
@@ -525,7 +532,6 @@ const ZoomableImageViewer = memo(({
                     </TouchableOpacity>
                 </View>
 
-                {/* Zoomable Image ScrollView */}
                 <ScrollView
                     ref={scrollViewRef}
                     horizontal
@@ -548,7 +554,6 @@ const ZoomableImageViewer = memo(({
                     ))}
                 </ScrollView>
 
-                {/* Footer with zoom controls */}
                 <View style={styles.zoomFooter}>
                     <TouchableOpacity
                         style={[styles.zoomControlButton, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
@@ -562,6 +567,8 @@ const ZoomableImageViewer = memo(({
         </Modal>
     );
 });
+
+ZoomableImageViewer.displayName = 'ZoomableImageViewer';
 
 const ImageCarousel = memo(({ images, onBack, isFavorite, onToggleFavorite }: {
     images: string[];
@@ -615,6 +622,8 @@ const ImageCarousel = memo(({ images, onBack, isFavorite, onToggleFavorite }: {
     );
 });
 
+ImageCarousel.displayName = 'ImageCarousel';
+
 const CategoryBadge = memo(({ categoryName, onPress }: { categoryName: string; onPress: () => void }) => {
     const colors = useTheme();
 
@@ -632,7 +641,8 @@ const CategoryBadge = memo(({ categoryName, onPress }: { categoryName: string; o
     );
 });
 
-// ⭐ NEW: Unit Information Card
+CategoryBadge.displayName = 'CategoryBadge';
+
 const UnitInformationCard = memo(({
     unitTypeInfo,
     unitValue
@@ -685,28 +695,7 @@ const UnitInformationCard = memo(({
     );
 });
 
-// Compact badge for status row
-const UnitTypeBadge = memo(({
-    unitTypeInfo,
-    unitValue
-}: {
-    unitTypeInfo: UnitTypeInfo;
-    unitValue?: number;
-}) => {
-    const colors = useTheme();
-    const displayText = unitValue && unitValue > 1
-        ? `${unitValue} ${unitTypeInfo.short}`
-        : unitTypeInfo.short;
-
-    return (
-        <View style={[styles.unitTypeBadge, { backgroundColor: colors.backgroundSecondary }]}>
-            <Icon name={unitTypeInfo.icon} size={14} color={colors.themePrimary} />
-            <Text style={[styles.unitTypeText, { color: colors.textPrimary }]} numberOfLines={1}>
-                {displayText}
-            </Text>
-        </View>
-    );
-});
+UnitInformationCard.displayName = 'UnitInformationCard';
 
 const StockStatusBadge = memo(({
     stockStatus,
@@ -719,13 +708,10 @@ const StockStatusBadge = memo(({
     unitTypeInfo: UnitTypeInfo;
     unitValue?: number;
 }) => {
-    // Format stock display with unit type
     const formatStockDisplay = (): string => {
         if (unitValue && unitValue > 1) {
-            // Show as "15 × 2 kg" format for packages
             return `${stock} × ${unitValue} ${unitTypeInfo.short}`;
         }
-        // Show as "15 kg" for single unit products
         return `${stock} ${unitTypeInfo.short}`;
     };
 
@@ -738,6 +724,8 @@ const StockStatusBadge = memo(({
         </View>
     );
 });
+
+StockStatusBadge.displayName = 'StockStatusBadge';
 
 const ProductHeader = memo(({
     product,
@@ -752,7 +740,6 @@ const ProductHeader = memo(({
 }) => {
     const colors = useTheme();
 
-    // Format product name with unit information
     const getProductNameWithUnit = (): string => {
         if (product.unit_value && product.unit_value > 1 && product.unit_type) {
             const unitDisplay = formatUnitDisplay(product.unit_type, product.unit_value);
@@ -784,11 +771,12 @@ const ProductHeader = memo(({
                     unitTypeInfo={unitTypeInfo}
                     unitValue={product.unit_value}
                 />
-                {/* <UnitTypeBadge unitTypeInfo={unitTypeInfo} unitValue={product.unit_value} /> */}
             </View>
         </>
     );
 });
+
+ProductHeader.displayName = 'ProductHeader';
 
 const QuantitySelector = memo(({
     quantity,
@@ -829,9 +817,12 @@ const QuantitySelector = memo(({
     );
 });
 
-// ⭐ ENHANCED: Price Section
+QuantitySelector.displayName = 'QuantitySelector';
+
+// ★ ENHANCED: Price Section with Actual Price Display
 const PriceSection = memo(({
     price,
+    actualPrice,
     quantity,
     maxStock,
     unitTypeInfo,
@@ -839,6 +830,7 @@ const PriceSection = memo(({
     onQuantityChange
 }: {
     price: string;
+    actualPrice?: string;
     quantity: number;
     maxStock: number;
     unitTypeInfo: UnitTypeInfo;
@@ -851,12 +843,24 @@ const PriceSection = memo(({
     const packagePrice = parseFloat(price);
     const perUnitPrice = hasPackaging ? packagePrice / unitValue! : packagePrice;
 
+    const showActualPrice = actualPrice &&
+        actualPrice !== '0' &&
+        actualPrice !== '0.00' &&
+        parseFloat(actualPrice) !== packagePrice;
+
     return (
         <View style={styles.priceSection}>
             <View style={styles.pricingDetails}>
                 <Text style={[styles.priceLabel, { color: colors.textLabel }]}>
                     {hasPackaging ? 'Package Price' : 'Price'}
                 </Text>
+
+                {showActualPrice && (
+                    <Text style={[styles.actualPrice, { color: colors.textGrey }]}>
+                        {formatPrice(actualPrice)}
+                    </Text>
+                )}
+
                 <Text style={[styles.price, { color: colors.themePrimary }]}>
                     {formatPrice(price)}
                 </Text>
@@ -886,6 +890,8 @@ const PriceSection = memo(({
     );
 });
 
+PriceSection.displayName = 'PriceSection';
+
 const TotalPriceCard = memo(({ totalPrice }: { totalPrice: number }) => {
     const colors = useTheme();
 
@@ -906,6 +912,8 @@ const TotalPriceCard = memo(({ totalPrice }: { totalPrice: number }) => {
     );
 });
 
+TotalPriceCard.displayName = 'TotalPriceCard';
+
 const ProductDescription = memo(({ description }: { description: string }) => {
     const colors = useTheme();
 
@@ -920,6 +928,8 @@ const ProductDescription = memo(({ description }: { description: string }) => {
         </View>
     );
 });
+
+ProductDescription.displayName = 'ProductDescription';
 
 const FeatureItem = memo(({
     icon,
@@ -948,6 +958,8 @@ const FeatureItem = memo(({
         </View>
     );
 });
+
+FeatureItem.displayName = 'FeatureItem';
 
 const ProductFeatures = memo(({ productType }: { productType?: string }) => {
     const colors = useTheme();
@@ -980,6 +992,8 @@ const ProductFeatures = memo(({ productType }: { productType?: string }) => {
     );
 });
 
+ProductFeatures.displayName = 'ProductFeatures';
+
 const InfoCard = memo(({
     icon,
     iconColor,
@@ -1006,6 +1020,8 @@ const InfoCard = memo(({
     );
 });
 
+InfoCard.displayName = 'InfoCard';
+
 const ProductInfoGrid = memo(({ product }: { product: Product }) => {
     return (
         <View style={styles.infoGrid}>
@@ -1015,6 +1031,8 @@ const ProductInfoGrid = memo(({ product }: { product: Product }) => {
         </View>
     );
 });
+
+ProductInfoGrid.displayName = 'ProductInfoGrid';
 
 const BottomActionBar = memo(({
     totalPrice,
@@ -1076,6 +1094,8 @@ const BottomActionBar = memo(({
     );
 });
 
+BottomActionBar.displayName = 'BottomActionBar';
+
 const LoadingState = memo(() => {
     const colors = useTheme();
 
@@ -1090,6 +1110,8 @@ const LoadingState = memo(() => {
         </MainContainer>
     );
 });
+
+LoadingState.displayName = 'LoadingState';
 
 // ============================================================================
 // MAIN COMPONENT
@@ -1143,7 +1165,6 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                 navigation.goBack();
             }
         } catch (error: any) {
-            console.error('❌ Fetch Product Error:', error);
             Alert.alert('Error', 'Failed to load product details');
             navigation.goBack();
         } finally {
@@ -1166,6 +1187,15 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
 
     const handleAddToCart = useCallback(() => {
         if (!product || product.stock === 0) return;
+
+        if (quantity > MAX_QUANTITY_PER_ITEM) {
+            Alert.alert(
+                'Maximum Quantity Reached',
+                `You can add a maximum of ${MAX_QUANTITY_PER_ITEM} units per item.`,
+                [{ text: 'OK' }]
+            );
+            return;
+        }
 
         if (isInCart(product.id)) {
             updateQuantity(product.id, quantity);
@@ -1208,8 +1238,16 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
         (change: number) => {
             if (!product) return;
             const newQuantity = quantity + change;
-            if (newQuantity >= 1 && newQuantity <= product.stock) {
+            const maxAllowed = Math.min(product.stock, MAX_QUANTITY_PER_ITEM);
+
+            if (newQuantity >= 1 && newQuantity <= maxAllowed) {
                 setQuantity(newQuantity);
+            } else if (newQuantity > maxAllowed) {
+                Alert.alert(
+                    'Maximum Quantity Reached',
+                    `You can add a maximum of ${MAX_QUANTITY_PER_ITEM} units per item.`,
+                    [{ text: 'OK' }]
+                );
             }
         },
         [product, quantity]
@@ -1236,10 +1274,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
     }, [product, isInWishlist, addToWishlist, removeFromWishlist]);
 
     const handleCategoryPress = useCallback(() => {
-        if (!product?.category_id) {
-            console.error('❌ Product category_id is missing');
-            return;
-        }
+        if (!product?.category_id) return;
         navigation.navigate(constant.routeName.categoryDetail, {
             params: {
                 categoryId: product.category_id,
@@ -1283,7 +1318,6 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                             onCategoryPress={handleCategoryPress}
                         />
 
-                        {/* ⭐ NEW: Unit Information Card */}
                         <UnitInformationCard
                             unitTypeInfo={unitTypeInfo}
                             unitValue={product.unit_value}
@@ -1291,8 +1325,9 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
 
                         <PriceSection
                             price={product.price}
+                            actualPrice={product.actual_price}
                             quantity={quantity}
-                            maxStock={product.stock}
+                            maxStock={Math.min(product.stock, MAX_QUANTITY_PER_ITEM)}
                             unitTypeInfo={unitTypeInfo}
                             unitValue={product.unit_value}
                             onQuantityChange={handleQuantityChange}
@@ -1443,22 +1478,8 @@ const styles = StyleSheet.create({
         fontSize: fonts.size.font13,
         fontFamily: fonts.family.primaryBold,
     },
-    unitTypeBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 16,
-        gap: 4,
-        maxWidth: 100,
-    },
-    unitTypeText: {
-        fontSize: fonts.size.font12,
-        fontFamily: fonts.family.primaryBold,
-        flexShrink: 1,
-    },
 
-    // ⭐ NEW: Unit Information Card
+    // Unit Information Card
     unitInfoCard: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -1524,7 +1545,7 @@ const styles = StyleSheet.create({
         letterSpacing: 0.3,
     },
 
-    // ⭐ ENHANCED: Price Section
+    // ★ ENHANCED: Price Section
     priceSection: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -1538,6 +1559,12 @@ const styles = StyleSheet.create({
         fontSize: fonts.size.font13,
         fontFamily: fonts.family.secondaryRegular,
         marginBottom: 4,
+    },
+    actualPrice: {
+        fontSize: fonts.size.font18,
+        fontFamily: fonts.family.primaryMedium,
+        textDecorationLine: 'line-through',
+        marginBottom: 2,
     },
     price: {
         fontSize: fonts.size.font30,

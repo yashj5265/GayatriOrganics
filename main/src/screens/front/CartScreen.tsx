@@ -16,10 +16,11 @@ import { formatUnitDisplay } from '../../components/listItems/utils';
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-const DELIVERY_CHARGE = 30;
-const FREE_DELIVERY_THRESHOLD = 200;
+const DELIVERY_CHARGE = 10;
+const FREE_DELIVERY_THRESHOLD = 150;
 const ESTIMATED_DELIVERY_TIME = '24-48 hours';
 const CURRENT_SAVINGS = 0;
+const MAX_QUANTITY_PER_ITEM = 6;
 
 // ============================================================================
 // TYPES
@@ -41,6 +42,7 @@ interface CartItemType {
 interface QuantityControlsProps {
     quantity: number;
     isProcessing: boolean;
+    maxQuantity: number;
     onIncrease: () => void;
     onDecrease: () => void;
 }
@@ -160,10 +162,12 @@ const EmptyCartView = memo(({ onShopNow }: { onShopNow: () => void }) => {
 const QuantityControls = memo(({
     quantity,
     isProcessing,
+    maxQuantity,
     onIncrease,
     onDecrease,
 }: QuantityControlsProps) => {
     const colors = useTheme();
+    const isMaxReached = quantity >= maxQuantity;
 
     return (
         <View style={styles.quantityContainer}>
@@ -190,13 +194,17 @@ const QuantityControls = memo(({
                     styles.quantityButton,
                     {
                         backgroundColor: colors.themePrimaryLight,
-                        opacity: isProcessing ? 0.5 : 1,
+                        opacity: (isProcessing || isMaxReached) ? 0.5 : 1,
                     },
                 ]}
                 onPress={onIncrease}
-                disabled={isProcessing}
+                disabled={isProcessing || isMaxReached}
             >
-                <Icon name="plus" size={16} color={colors.themePrimary} />
+                <Icon 
+                    name="plus" 
+                    size={16} 
+                    color={isMaxReached ? colors.textDescription : colors.themePrimary} 
+                />
             </AppTouchableRipple>
         </View>
     );
@@ -270,6 +278,7 @@ const CartItemCard = memo(({
                 <QuantityControls
                     quantity={item.quantity}
                     isProcessing={isProcessing}
+                    maxQuantity={MAX_QUANTITY_PER_ITEM}
                     onIncrease={() => onQuantityChange(1)}
                     onDecrease={() => onQuantityChange(-1)}
                 />
@@ -401,7 +410,7 @@ const DeliveryInfo = memo(() => {
                     Delivery Information
                 </Text>
                 <Text style={[styles.infoText, { color: colors.textDescription }]}>
-                    Your order will be delivered within {ESTIMATED_DELIVERY_TIME}. Free delivery on orders above ₹{FREE_DELIVERY_THRESHOLD}.
+                    Your order will be delivered within {ESTIMATED_DELIVERY_TIME}. Free delivery on orders ₹{FREE_DELIVERY_THRESHOLD} and above.
                 </Text>
             </View>
         </View>
@@ -503,8 +512,12 @@ const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
     // COMPUTED VALUES
     // ============================================================================
     const deliveryCharge = useMemo(
-        () => (cartItems.length > 0 ? DELIVERY_CHARGE : 0),
-        [cartItems.length]
+        () => {
+            if (cartItems.length === 0) return 0;
+            // Free delivery for orders above or equal to ₹150
+            return cartTotal >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_CHARGE;
+        },
+        [cartItems.length, cartTotal]
     );
 
     const total = useMemo(
@@ -526,6 +539,16 @@ const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
 
             if (newQuantity <= 0) {
                 handleRemoveItem(itemId);
+                return;
+            }
+
+            // Check maximum quantity limit
+            if (newQuantity > MAX_QUANTITY_PER_ITEM) {
+                Alert.alert(
+                    'Maximum Quantity Reached',
+                    `You can add a maximum of ${MAX_QUANTITY_PER_ITEM} units per item.`,
+                    [{ text: 'OK' }]
+                );
                 return;
             }
 

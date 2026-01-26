@@ -41,6 +41,7 @@ export interface ProductModel {
     name: string;
     description: string;
     price: string;
+    actual_price: string;
     unit_type: string;
     unit_value: number;
     available_units: string;

@@ -101,5 +101,5 @@ export default {
         reviewAndroidUrl: "market://details?id=com.gayatriorganics",
         reviewiOSUrl: "itms-apps://itunes.apple.com/app/idYOUR_APP_ID?action=write-review",
     },
-    appIdentity: "Gayatri Organics",
+    appIdentity: "Gayatri Organic Farm",
 }

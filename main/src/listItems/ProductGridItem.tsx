@@ -1,3 +1,6 @@
+// ============================================================================
+// ProductGridItem.tsx - REFACTORED
+// ============================================================================
 import React, { useState, useCallback, useMemo, memo } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -16,7 +19,62 @@ export interface ProductGridItemProps {
     isFavorite?: boolean;
 }
 
-const ProductGridItem: React.FC<ProductGridItemProps> = memo(({ item, onPress, onAddToCart, isInCart, colors, onToggleFavorite, isFavorite = false }) => {
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+const formatPrice = (price: string | number): string => {
+    return `₹${parseFloat(price.toString()).toFixed(2)}`;
+};
+
+const shouldShowActualPrice = (actualPrice?: string, currentPrice?: string): boolean => {
+    if (!actualPrice || actualPrice === '0' || actualPrice === '0.00') return false;
+    if (!currentPrice) return false;
+    return parseFloat(actualPrice) !== parseFloat(currentPrice);
+};
+
+// ============================================================================
+// SUB-COMPONENTS
+// ============================================================================
+const PriceDisplay = memo(({
+    price,
+    actualPrice,
+    colors,
+}: {
+    price: string;
+    actualPrice?: string;
+    colors: AppColors;
+}) => {
+    const showActualPrice = shouldShowActualPrice(actualPrice, price);
+
+    return (
+        <View style={styles.priceContainer}>
+            <Text style={[styles.priceLabel, { color: colors.textLabel }]}>Price</Text>
+            {showActualPrice && (
+                <Text style={[styles.actualPrice, { color: colors.textGrey }]}>
+                    {formatPrice(actualPrice!)}
+                </Text>
+            )}
+            <Text style={[styles.gridPrice, { color: colors.themePrimary }]}>
+                {formatPrice(price)}
+            </Text>
+        </View>
+    );
+});
+
+PriceDisplay.displayName = 'PriceDisplay';
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
+const ProductGridItem: React.FC<ProductGridItemProps> = memo(({
+    item,
+    onPress,
+    onAddToCart,
+    isInCart,
+    colors,
+    onToggleFavorite,
+    isFavorite = false
+}) => {
     const stockStatus = useMemo(() => getStockStatus(item.stock), [item.stock]);
     const [imageError, setImageError] = useState(false);
 
@@ -35,8 +93,6 @@ const ProductGridItem: React.FC<ProductGridItemProps> = memo(({ item, onPress, o
     const handleFavoritePress = useCallback(() => {
         onToggleFavorite?.(item);
     }, [item, onToggleFavorite]);
-
-    const productPrice = useMemo(() => parseFloat(item.price).toFixed(2), [item.price]);
 
     const cardStyle = useMemo(() => ({
         ...styles.gridCard,
@@ -104,16 +160,15 @@ const ProductGridItem: React.FC<ProductGridItemProps> = memo(({ item, onPress, o
                 </View>
 
                 <View style={styles.gridFooter}>
-                    <View>
-                        <Text style={[styles.priceLabel, { color: colors.textLabel }]}>Price</Text>
-                        <Text style={[styles.gridPrice, { color: colors.themePrimary }]}>
-                            ₹{productPrice}
-                        </Text>
-                    </View>
+                    <PriceDisplay
+                        price={item.price}
+                        actualPrice={item.actual_price}
+                        colors={colors}
+                    />
                     <TouchableOpacity
                         style={[
                             styles.cartButton,
-                            { 
+                            {
                                 backgroundColor: isInCart ? colors.themePrimary : colors.themePrimaryLight,
                                 opacity: item.stock === 0 ? 0.5 : 1
                             }
@@ -139,6 +194,9 @@ ProductGridItem.displayName = 'ProductGridItem';
 
 export default ProductGridItem;
 
+// ============================================================================
+// STYLES
+// ============================================================================
 const styles = StyleSheet.create({
     gridCard: {
         flex: 1,
@@ -238,10 +296,19 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'flex-end',
     },
+    priceContainer: {
+        flex: 1,
+    },
     priceLabel: {
         fontSize: fonts.size.font9,
         fontFamily: fonts.family.secondaryRegular,
         marginBottom: 2,
+    },
+    actualPrice: {
+        fontSize: fonts.size.font10,
+        fontFamily: fonts.family.primaryMedium,
+        textDecorationLine: 'line-through',
+        marginBottom: 1,
     },
     gridPrice: {
         fontSize: fonts.size.font14,
@@ -260,4 +327,3 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
     },
 });
-

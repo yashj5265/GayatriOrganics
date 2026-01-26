@@ -17,7 +17,7 @@ import EditProfileModal from '../../popups/EditProfileModal';
 // CONSTANTS
 // ============================================================================
 const APP_VERSION = '1.0.0';
-const APP_NAME = 'Gayatri Organics';
+const APP_NAME = 'Gayatri Organic Farm';
 const DEFAULT_USER_NAME = 'User';
 const COUNTRY_CODE = '+91';
 

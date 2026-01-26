@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo, memo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Image, ActivityIndicator, Linking } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -143,6 +143,12 @@ const formatAddress = (address: Address | null): string => {
 
 const formatPrice = (price: string | number): string => {
     return `₹${parseFloat(price.toString()).toFixed(2)}`;
+};
+
+const shouldShowActualPrice = (actualPrice?: string, currentPrice?: string): boolean => {
+    if (!actualPrice || actualPrice === '0' || actualPrice === '0.00') return false;
+    if (!currentPrice) return false;
+    return parseFloat(actualPrice) !== parseFloat(currentPrice);
 };
 
 // ============================================================================
@@ -371,9 +377,16 @@ const ProductCard = memo(({ product, isInCart, onPress, onAddToCart }: ProductCa
             </Text>
 
             <View style={styles.productFooter}>
-                <Text style={[styles.productPrice, { color: colors.themePrimary }]}>
-                    {formatPrice(product.price)}
-                </Text>
+                <View style={styles.priceContainer}>
+                    {shouldShowActualPrice(product.actual_price, product.price) && (
+                        <Text style={[styles.actualPrice, { color: colors.textDescription }]}>
+                            {formatPrice(product.actual_price!)}
+                        </Text>
+                    )}
+                    <Text style={[styles.productPrice, { color: colors.themePrimary }]}>
+                        {formatPrice(product.price)}
+                    </Text>
+                </View>
                 <AppTouchableRipple
                     style={[
                         styles.addButton,
@@ -599,8 +612,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                     name: p.name,
                     description: p.description,
                     price: p.price,
+                    actual_price: p.actual_price, // ★ ADDED for future price display features
                     stock: stock,
                     unit_type: p.unit_type,
+                    unit_value: p.unit_value, // ★ ADDED for package information
                     image1: p.image1,
                     image2: p.image2,
                     image3: p.image3,
@@ -665,7 +680,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 backgroundColor: '#E8F5E9',
                 textColor: '#FFFFFF',
             }));
-
+            console.log('mappedBanners', mappedBanners);
             setCarousels(mappedBanners);
         } catch (error) {
             console.error('Error fetching carousels:', error);
@@ -845,40 +860,83 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     // BANNER HANDLERS
     // ============================================================================
     const handleBannerPress = useCallback(
-        (banner: Banner) => {
-            if (!banner.link || !banner.link_type) {
+        async (banner: Banner) => {
+            // If no link or link_type, do nothing
+            if (!banner.link || !banner.link_type || banner.link_type === 'none') {
                 return;
             }
 
             try {
-                const linkId = parseInt(banner.link, 10);
-                if (isNaN(linkId)) {
-                    console.error('Invalid link ID:', banner.link);
-                    return;
-                }
-
                 switch (banner.link_type) {
                     case 'category':
                         // Navigate to category detail
+                        const categoryId = parseInt(banner.link, 10);
+                        if (isNaN(categoryId)) {
+                            console.error('Invalid category ID:', banner.link);
+                            Alert.alert('Error', 'Invalid category link');
+                            return;
+                        }
                         navigation.navigate(constant.routeName.categoryDetail, {
                             params: {
-                                categoryId: linkId,
+                                categoryId: categoryId,
                                 categoryName: banner.title,
                             },
                         });
                         break;
+
                     case 'product':
                         // Navigate to product detail
+                        const productId = parseInt(banner.link, 10);
+                        if (isNaN(productId)) {
+                            console.error('Invalid product ID:', banner.link);
+                            Alert.alert('Error', 'Invalid product link');
+                            return;
+                        }
                         navigation.navigate(constant.routeName.productDetail, {
-                            productId: linkId,
+                            productId: productId,
                         });
                         break;
+
+                    case 'external':
+                        // Open external URL in browser
+                        try {
+                            let url = banner.link.trim();
+                            // Add https:// if protocol is missing
+                            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                                url = `https://${url}`;
+                            }
+                            // Try to open URL directly (canOpenURL can be unreliable on Android)
+                            await Linking.openURL(url);
+                        } catch (error) {
+                            console.error('Error opening external URL:', error);
+                            Alert.alert('Error', 'Unable to open this URL. Please check your internet connection.');
+                        }
+                        break;
+
+                    case 'mobile':
+                        // Open dialer with phone number
+                        try {
+                            const phoneNumber = banner.link.trim().replace(/[^0-9+]/g, ''); // Remove non-numeric except +
+                            if (!phoneNumber) {
+                                Alert.alert('Error', 'Invalid phone number');
+                                return;
+                            }
+                            const telUrl = `tel:${phoneNumber}`;
+                            // Try to open dialer directly
+                            await Linking.openURL(telUrl);
+                        } catch (error) {
+                            console.error('Error opening dialer:', error);
+                            Alert.alert('Error', 'Unable to open dialer. Please try again.');
+                        }
+                        break;
+
                     default:
                         console.log('Unknown link type:', banner.link_type);
                         break;
                 }
             } catch (error) {
                 console.error('Error handling banner press:', error);
+                Alert.alert('Error', 'Failed to process banner link. Please try again.');
             }
         },
         [navigation]
@@ -1210,6 +1268,15 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+    },
+    priceContainer: {
+        flex: 1,
+    },
+    actualPrice: {
+        fontSize: fonts.size.font12,
+        fontFamily: fonts.family.primaryMedium,
+        textDecorationLine: 'line-through',
+        marginBottom: 2,
     },
     productPrice: {
         fontSize: fonts.size.font16,

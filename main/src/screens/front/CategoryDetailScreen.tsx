@@ -83,7 +83,7 @@ const HEADER_IMAGE_HEIGHT = 240;
 const BENEFITS: BenefitData[] = [
     {
         icon: 'leaf',
-        title: '100% Chemical Free',
+        title: 'Chemical Free',
         description: 'No pesticides or harmful chemicals used',
         iconBgColor: '#E8F5E9',
     },
@@ -184,6 +184,7 @@ const useCategoryProducts = (categoryId: number | undefined) => {
                             name: p.name,
                             description: p.description,
                             price: p.price,
+                            actual_price: p.actual_price, // ★ ADDED for strike-through price display
                             stock: stock,
                             unit_type: p.unit_type,
                             unit_value: p.unit_value,
@@ -834,7 +835,7 @@ const AboutSection: React.FC = React.memo(() => {
             <View style={styles.content}>
                 <Text style={styles.title}>About This Category</Text>
                 <Text style={styles.text}>
-                    All products in this category are 100% organic, fresh, and sourced directly from local farms.
+                    All products in this category are organic, fresh, and sourced directly from local farms.
                     We ensure the highest quality standards for your health and wellbeing.
                 </Text>
             </View>
