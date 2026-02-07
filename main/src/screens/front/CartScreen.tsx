@@ -12,6 +12,7 @@ import fonts from '../../styles/fonts';
 import constant from '../../utilities/constant';
 import { getImageUrl } from '../../listItems';
 import { formatUnitDisplay } from '../../components/listItems/utils';
+import { ProductListScreenProps } from './ProductListScreen';
 
 // ============================================================================
 // CONSTANTS
@@ -149,7 +150,7 @@ const EmptyCartView = memo(({ onShopNow }: { onShopNow: () => void }) => {
                     style={[styles.shopNowButton, { backgroundColor: colors.themePrimary }]}
                     onPress={onShopNow}
                 >
-                    <Icon name="shopping" size={20} color={colors.white} />
+                    <Icon name="shopping" size={25} color={colors.white} />
                     <Text style={[styles.shopNowText, { color: colors.white }]}>
                         Start Shopping
                     </Text>
@@ -200,10 +201,10 @@ const QuantityControls = memo(({
                 onPress={onIncrease}
                 disabled={isProcessing || isMaxReached}
             >
-                <Icon 
-                    name="plus" 
-                    size={16} 
-                    color={isMaxReached ? colors.textDescription : colors.themePrimary} 
+                <Icon
+                    name="plus"
+                    size={16}
+                    color={isMaxReached ? colors.textDescription : colors.themePrimary}
                 />
             </AppTouchableRipple>
         </View>
@@ -253,7 +254,7 @@ const CartItemCard = memo(({
                 <Text style={[styles.itemName, { color: colors.textPrimary }]}>
                     {item.name}
                 </Text>
-                
+
                 {/* Enhanced Unit Display */}
                 <View style={styles.priceInfoContainer}>
                     {hasPackaging ? (
@@ -604,9 +605,10 @@ const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
     }, [hasItems, navigation]);
 
     const handleShopNow = useCallback(() => {
-        navigation.navigate(constant.routeName.mainTabs, {
-            screen: constant.routeName.home,
-        });
+        const params: ProductListScreenProps = {
+            focusSearch: true,
+        };
+        navigation.push(constant.routeName.products, params);
     }, [navigation]);
 
     const handleImageError = useCallback((itemId: number) => {
@@ -743,15 +745,16 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         paddingHorizontal: 40,
+        paddingBottom: 10,
     },
     shopNowButton: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 32,
-        paddingVertical: 14,
-        borderRadius: 12,
+        justifyContent: 'center',
+        height: 50,
+        borderRadius: 14,
         gap: 10,
-        marginTop: 24,
         elevation: 4,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
@@ -761,6 +764,7 @@ const styles = StyleSheet.create({
     shopNowText: {
         fontSize: fonts.size.font16,
         fontFamily: fonts.family.primaryBold,
+        color: 'white',
     },
     itemsSection: {
         marginBottom: 20,

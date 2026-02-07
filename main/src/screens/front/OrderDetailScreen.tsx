@@ -359,6 +359,11 @@ const OrderInfoCard = memo(({ order, statusInfo }: { order: Order; statusInfo: S
                     value={order.items_count || order.items?.length || 0}
                 />
                 <InfoRow
+                    label="Delivery Charge:"
+                    value={formatCurrency(order.delivery_charge)}
+                    isAmount
+                />
+                <InfoRow
                     label="Total Amount:"
                     value={formatCurrency(amount)}
                     isAmount
@@ -615,6 +620,11 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ navigation, route
                     contentContainerStyle={styles.contentContainer}
                     showsVerticalScrollIndicator={false}
                 >
+                    {/* Order Items Card */}
+                    {order.items && order.items.length > 0 && (
+                        <OrderItemsCard items={order.items} />
+                    )}
+
                     {/* Order Info Card */}
                     {statusInfo && (
                         <OrderInfoCard order={order} statusInfo={statusInfo} />
@@ -648,10 +658,7 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ navigation, route
                         } />
                     )}
 
-                    {/* Order Items Card */}
-                    {order.items && order.items.length > 0 && (
-                        <OrderItemsCard items={order.items} />
-                    )}
+
                 </ScrollView>
             </View>
         </MainContainer>

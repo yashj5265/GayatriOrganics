@@ -17,7 +17,7 @@ import { CreateOrderResponseModel, OrdersListResponseModel, OrderModel } from '.
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-const DELIVERY_CHARGE = 30;
+const DELIVERY_CHARGE = 10;
 
 const ADDRESS_TYPES = {
     HOME: 'Home',
