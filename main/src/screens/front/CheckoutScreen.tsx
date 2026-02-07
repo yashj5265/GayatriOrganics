@@ -18,6 +18,8 @@ import { CreateOrderResponseModel, OrdersListResponseModel, OrderModel } from '.
 // CONSTANTS
 // ============================================================================
 const DELIVERY_CHARGE = 10;
+const FREE_DELIVERY_THRESHOLD = 150;
+const ESTIMATED_DELIVERY_TIME = '24-48 hours';
 
 const ADDRESS_TYPES = {
     HOME: 'Home',
@@ -306,6 +308,24 @@ const SummaryRow = memo(({
     );
 });
 
+const DeliveryInfo = memo(() => {
+    const colors = useTheme();
+
+    return (
+        <View style={[styles.infoCard, { backgroundColor: colors.backgroundSecondary }]}>
+            <Icon name="information" size={20} color={colors.themePrimary} />
+            <View style={styles.infoContent}>
+                <Text style={[styles.infoTitle, { color: colors.textPrimary }]}>
+                    Delivery Information
+                </Text>
+                <Text style={[styles.infoText, { color: colors.textDescription }]}>
+                    Your order will be delivered within {ESTIMATED_DELIVERY_TIME}. Free delivery on orders ₹{FREE_DELIVERY_THRESHOLD} and above.
+                </Text>
+            </View>
+        </View>
+    );
+});
+
 const OrderSummary = memo(({ itemCount, cartTotal, deliveryCharge, total }: OrderSummaryProps) => {
     const colors = useTheme();
 
@@ -440,8 +460,12 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) => {
     // COMPUTED VALUES
     // ============================================================================
     const deliveryCharge = useMemo(
-        () => (cartItems.length > 0 ? DELIVERY_CHARGE : 0),
-        [cartItems.length]
+        () => {
+            if (cartItems.length === 0) return 0;
+            // Free delivery for orders above or equal to ₹150
+            return cartTotal >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_CHARGE;
+        },
+        [cartItems.length, cartTotal]
     );
 
     const total = useMemo(
@@ -645,6 +669,9 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) => {
                         total={total}
                     />
 
+                    {/* Delivery Info */}
+                    <DeliveryInfo />
+
                     {/* Payment Method */}
                     <PaymentMethod />
                 </ScrollView>
@@ -825,6 +852,26 @@ const styles = StyleSheet.create({
     divider: {
         height: 1,
         marginVertical: 12,
+    },
+    infoCard: {
+        flexDirection: 'row',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 24,
+        gap: 12,
+    },
+    infoContent: {
+        flex: 1,
+    },
+    infoTitle: {
+        fontSize: fonts.size.font14,
+        fontFamily: fonts.family.primaryBold,
+        marginBottom: 4,
+    },
+    infoText: {
+        fontSize: fonts.size.font12,
+        fontFamily: fonts.family.secondaryRegular,
+        lineHeight: 18,
     },
     totalLabel: {
         fontSize: fonts.size.font16,
