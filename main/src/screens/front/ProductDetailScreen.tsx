@@ -28,6 +28,7 @@ import { useTheme } from '../../contexts/ThemeProvider';
 import { useCart } from '../../contexts/CardContext';
 import { useWishlist } from '../../contexts/WishlistContext';
 import AppTouchableRipple from '../../components/AppTouchableRipple';
+import CartQuickAdjust from '../../components/CartQuickAdjust';
 import ApiManager from '../../managers/ApiManager';
 import StorageManager from '../../managers/StorageManager';
 import fonts from '../../styles/fonts';
@@ -1038,15 +1039,26 @@ const BottomActionBar = memo(({
     totalPrice,
     inCart,
     isOutOfStock,
-    onAddToCart
+    onAddToCart,
+    productId,
+    cartQuantity = 0,
+    onUpdateQuantity,
+    onRemoveFromCart,
+    maxQuantity = 999,
 }: {
     totalPrice: number;
     inCart: boolean;
     isOutOfStock: boolean;
     onAddToCart: () => void;
+    productId?: number;
+    cartQuantity?: number;
+    onUpdateQuantity?: (itemId: number, quantity: number) => void;
+    onRemoveFromCart?: (itemId: number) => void;
+    maxQuantity?: number;
 }) => {
     const colors = useTheme();
     const insets = useSafeAreaInsets();
+    const showQuickAdjust = inCart && cartQuantity > 0 && productId != null && onUpdateQuantity && onRemoveFromCart;
 
     return (
         <View
@@ -1068,27 +1080,40 @@ const BottomActionBar = memo(({
                     </Text>
                 </View>
 
-                <AppTouchableRipple
-                    style={[
-                        styles.addToCartButton,
-                        {
-                            backgroundColor: isOutOfStock
-                                ? colors.textLabel
-                                : colors.themePrimary,
-                        },
-                    ]}
-                    onPress={onAddToCart}
-                    disabled={isOutOfStock}
-                >
-                    <Icon
-                        name={inCart ? 'check-circle' : 'cart-plus'}
-                        size={22}
-                        color={colors.white}
+                {showQuickAdjust ? (
+                    <CartQuickAdjust
+                        quantity={cartQuantity}
+                        onIncrease={() => onUpdateQuantity!(productId!, cartQuantity + 1)}
+                        onDecrease={() => onUpdateQuantity!(productId!, cartQuantity - 1)}
+                        onRemove={() => onRemoveFromCart!(productId!)}
+                        maxQuantity={maxQuantity}
+                        disabled={isOutOfStock}
+                        colors={colors}
+                        variant="bar"
                     />
-                    <Text style={[styles.addToCartText, { color: colors.white }]}>
-                        {isOutOfStock ? 'Out of Stock' : inCart ? 'Update Cart' : 'Add to Cart'}
-                    </Text>
-                </AppTouchableRipple>
+                ) : (
+                    <AppTouchableRipple
+                        style={[
+                            styles.addToCartButton,
+                            {
+                                backgroundColor: isOutOfStock
+                                    ? colors.textLabel
+                                    : colors.themePrimary,
+                            },
+                        ]}
+                        onPress={onAddToCart}
+                        disabled={isOutOfStock}
+                    >
+                        <Icon
+                            name={inCart ? 'check-circle' : 'cart-plus'}
+                            size={22}
+                            color={colors.white}
+                        />
+                        <Text style={[styles.addToCartText, { color: colors.white }]}>
+                            {isOutOfStock ? 'Out of Stock' : inCart ? 'Update Cart' : 'Add to Cart'}
+                        </Text>
+                    </AppTouchableRipple>
+                )}
             </View>
         </View>
     );
@@ -1120,7 +1145,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
     const colors = useTheme();
     const insets = useSafeAreaInsets();
     const { productId } = route.params;
-    const { addToCart, isInCart, updateQuantity, getCartItem } = useCart();
+    const { addToCart, isInCart, updateQuantity, getCartItem, removeFromCart } = useCart();
     const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
 
     const [product, setProduct] = useState<Product | null>(null);
@@ -1134,8 +1159,9 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
     const isFavorite = useMemo(() => (product ? isInWishlist(product.id) : false), [product, isInWishlist]);
     const totalPrice = useMemo(() => {
         if (!product) return 0;
-        return parseFloat(product.price) * quantity;
-    }, [product, quantity]);
+        const qty = inCart ? (getCartItem(product.id)?.quantity ?? quantity) : quantity;
+        return parseFloat(product.price) * qty;
+    }, [product, quantity, inCart, getCartItem]);
 
     const scrollContentStyle = useMemo(
         () => ({
@@ -1345,6 +1371,11 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                     inCart={inCart}
                     isOutOfStock={product.stock === 0}
                     onAddToCart={handleAddToCart}
+                    productId={product.id}
+                    cartQuantity={getCartItem(product.id)?.quantity ?? 0}
+                    onUpdateQuantity={updateQuantity}
+                    onRemoveFromCart={removeFromCart}
+                    maxQuantity={Math.min(product.stock, MAX_QUANTITY_PER_ITEM)}
                 />
             </View>
         </MainContainer>

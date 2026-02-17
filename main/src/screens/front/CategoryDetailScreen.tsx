@@ -468,6 +468,9 @@ interface ProductsSectionProps {
     onViewModeChange: (mode: 'grid' | 'list') => void;
     onProductPress: (product: ProductListProduct | number) => void;
     onAddToCart: (product: ProductListProduct) => void;
+    onUpdateQuantity: (productId: number, quantity: number) => void;
+    onRemoveFromCart: (productId: number) => void;
+    getCartQuantity: (productId: number) => number;
     onToggleFavorite: (product: ProductListProduct) => void;
     isInCart: (id: number) => boolean;
     isInWishlist: (id: number) => boolean;
@@ -482,6 +485,9 @@ const ProductsSection: React.FC<ProductsSectionProps> = React.memo(({
     onViewModeChange,
     onProductPress,
     onAddToCart,
+    onUpdateQuantity,
+    onRemoveFromCart,
+    getCartQuantity,
     onToggleFavorite,
     isInCart,
     isInWishlist,
@@ -495,11 +501,14 @@ const ProductsSection: React.FC<ProductsSectionProps> = React.memo(({
             onPress={onProductPress}
             onAddToCart={onAddToCart}
             isInCart={isInCart(item.id)}
+            cartQuantity={getCartQuantity(item.id)}
+            onUpdateQuantity={onUpdateQuantity}
+            onRemoveFromCart={onRemoveFromCart}
             colors={colors}
             onToggleFavorite={onToggleFavorite}
             isFavorite={isInWishlist(item.id)}
         />
-    ), [onProductPress, onAddToCart, isInCart, colors, onToggleFavorite, isInWishlist]);
+    ), [onProductPress, onAddToCart, onUpdateQuantity, onRemoveFromCart, getCartQuantity, isInCart, colors, onToggleFavorite, isInWishlist]);
 
     return (
         <View style={styles.container}>
@@ -603,7 +612,7 @@ const CategoryDetailScreen: React.FC<CategoryDetailScreenNavigationProps> = ({ n
 
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-    const { addToCart, isInCart } = useCart();
+    const { addToCart, isInCart, getCartItem, updateQuantity, removeFromCart } = useCart();
     const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
 
     // Custom hooks
@@ -799,6 +808,9 @@ const CategoryDetailScreen: React.FC<CategoryDetailScreenNavigationProps> = ({ n
                         onViewModeChange={setViewMode}
                         onProductPress={handleProductPress}
                         onAddToCart={handleAddToCart}
+                        onUpdateQuantity={updateQuantity}
+                        onRemoveFromCart={removeFromCart}
+                        getCartQuantity={(id) => getCartItem(id)?.quantity ?? 0}
                         onToggleFavorite={handleToggleFavorite}
                         isInCart={isInCart}
                         isInWishlist={isInWishlist}

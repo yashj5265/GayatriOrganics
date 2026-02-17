@@ -8,12 +8,17 @@ import { AppColors } from '../styles/colors';
 import fonts from '../styles/fonts';
 import { getImageUrl, getStockStatus } from './utils';
 import { Product } from '../screens/front/ProductListScreen';
+import CartQuickAdjust from '../components/CartQuickAdjust';
+import { MAX_CART_QUANTITY_PER_ITEM } from '../contexts/CardContext';
 
 export interface ProductGridItemProps {
     item: Product;
     onPress: (product: Product) => void;
     onAddToCart: (product: Product) => void;
     isInCart: boolean;
+    cartQuantity?: number;
+    onUpdateQuantity?: (productId: number, quantity: number) => void;
+    onRemoveFromCart?: (productId: number) => void;
     colors: AppColors;
     onToggleFavorite?: (product: Product) => void;
     isFavorite?: boolean;
@@ -48,13 +53,12 @@ const PriceDisplay = memo(({
 
     return (
         <View style={styles.priceContainer}>
-            <Text style={[styles.priceLabel, { color: colors.textLabel }]}>Price</Text>
             {showActualPrice && (
-                <Text style={[styles.actualPrice, { color: colors.textGrey }]}>
+                <Text style={[styles.actualPrice, { color: colors.textDescription }]}>
                     {formatPrice(actualPrice!)}
                 </Text>
             )}
-            <Text style={[styles.gridPrice, { color: colors.themePrimary }]}>
+            <Text style={[styles.gridPrice, { color: colors.textPrimary }]}>
                 {formatPrice(price)}
             </Text>
         </View>
@@ -71,6 +75,9 @@ const ProductGridItem: React.FC<ProductGridItemProps> = memo(({
     onPress,
     onAddToCart,
     isInCart,
+    cartQuantity = 0,
+    onUpdateQuantity,
+    onRemoveFromCart,
     colors,
     onToggleFavorite,
     isFavorite = false
@@ -165,25 +172,40 @@ const ProductGridItem: React.FC<ProductGridItemProps> = memo(({
                         actualPrice={item.actual_price}
                         colors={colors}
                     />
-                    <TouchableOpacity
-                        style={[
-                            styles.cartButton,
-                            {
-                                backgroundColor: isInCart ? colors.themePrimary : colors.themePrimaryLight,
-                                opacity: item.stock === 0 ? 0.5 : 1
-                            }
-                        ]}
-                        onPress={handleAddToCartPress}
-                        onPressIn={(e) => e.stopPropagation()}
-                        disabled={item.stock === 0}
-                        activeOpacity={0.7}
-                    >
-                        <Icon
-                            name={isInCart ? "check" : "cart-plus"}
-                            size={18}
-                            color={isInCart ? colors.white : colors.themePrimary}
-                        />
-                    </TouchableOpacity>
+                    {isInCart && cartQuantity > 0 && onUpdateQuantity && onRemoveFromCart ? (
+                        <View style={styles.quickAdjustWrap} onStartShouldSetResponder={() => true}>
+                            <CartQuickAdjust
+                                quantity={cartQuantity}
+                                onIncrease={() => onUpdateQuantity(item.id, cartQuantity + 1)}
+                                onDecrease={() => onUpdateQuantity(item.id, cartQuantity - 1)}
+                                onRemove={() => onRemoveFromCart(item.id)}
+                                maxQuantity={Math.min(item.stock, MAX_CART_QUANTITY_PER_ITEM)}
+                                disabled={item.stock === 0}
+                                colors={colors}
+                                variant="grid"
+                            />
+                        </View>
+                    ) : (
+                        <TouchableOpacity
+                            style={[
+                                styles.cartButton,
+                                {
+                                    backgroundColor: item.stock === 0 ? colors.buttonDisabled : colors.themePrimary,
+                                    opacity: item.stock === 0 ? 0.6 : 1,
+                                }
+                            ]}
+                            onPress={handleAddToCartPress}
+                            onPressIn={(e) => e.stopPropagation()}
+                            disabled={item.stock === 0}
+                            activeOpacity={0.7}
+                        >
+                            <Icon
+                                name="cart-plus"
+                                size={16}
+                                color={colors.white}
+                            />
+                        </TouchableOpacity>
+                    )}
                 </View>
             </View>
         </TouchableOpacity>
@@ -195,24 +217,24 @@ ProductGridItem.displayName = 'ProductGridItem';
 export default ProductGridItem;
 
 // ============================================================================
-// STYLES
+// STYLES – classy, modern product cards
 // ============================================================================
 const styles = StyleSheet.create({
     gridCard: {
         flex: 1,
-        borderRadius: 12,
+        borderRadius: 16,
         overflow: 'hidden',
-        marginBottom: 12,
-        elevation: 3,
+        marginBottom: 14,
+        marginHorizontal: 4,
+        elevation: 2,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.12,
-        shadowRadius: 6,
-        marginHorizontal: 2,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
     },
     gridImageContainer: {
         width: '100%',
-        height: 120,
+        height: 124,
         position: 'relative',
     },
     gridImage: {
@@ -227,12 +249,12 @@ const styles = StyleSheet.create({
     },
     stockBadge: {
         position: 'absolute',
-        top: 6,
-        right: 6,
-        paddingHorizontal: 6,
-        paddingVertical: 3,
-        borderRadius: 10,
-        minWidth: 28,
+        top: 8,
+        right: 8,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        minWidth: 26,
         alignItems: 'center',
     },
     stockBadgeText: {
@@ -241,27 +263,27 @@ const styles = StyleSheet.create({
     },
     wishlistBtn: {
         position: 'absolute',
-        top: 6,
-        left: 6,
-        width: 28,
-        height: 28,
-        borderRadius: 14,
+        top: 8,
+        left: 8,
+        width: 30,
+        height: 30,
+        borderRadius: 15,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.9)',
-        elevation: 2,
+        backgroundColor: 'rgba(255,255,255,0.92)',
+        elevation: 1,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
         shadowRadius: 4,
     },
     gridContent: {
-        padding: 8,
+        padding: 12,
     },
     categoryTag: {
-        paddingHorizontal: 6,
-        paddingVertical: 3,
-        borderRadius: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
         marginBottom: 6,
         alignSelf: 'flex-start',
     },
@@ -269,23 +291,24 @@ const styles = StyleSheet.create({
         fontSize: fonts.size.font9,
         fontFamily: fonts.family.primaryBold,
         textTransform: 'uppercase',
+        letterSpacing: 0.4,
     },
     gridProductName: {
-        fontSize: fonts.size.font12,
+        fontSize: fonts.size.font13,
         fontFamily: fonts.family.primaryBold,
         marginBottom: 6,
-        minHeight: 32,
-        lineHeight: 16,
+        minHeight: 36,
+        lineHeight: 18,
     },
     stockStatus: {
         flexDirection: 'row',
         alignItems: 'center',
         alignSelf: 'flex-start',
-        paddingHorizontal: 6,
-        paddingVertical: 3,
-        borderRadius: 10,
-        gap: 3,
-        marginBottom: 6,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        gap: 4,
+        marginBottom: 8,
     },
     stockStatusText: {
         fontSize: fonts.size.font9,
@@ -295,35 +318,31 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-end',
+        gap: 8,
     },
     priceContainer: {
         flex: 1,
-    },
-    priceLabel: {
-        fontSize: fonts.size.font9,
-        fontFamily: fonts.family.secondaryRegular,
-        marginBottom: 2,
+        justifyContent: 'flex-end',
     },
     actualPrice: {
-        fontSize: fonts.size.font10,
-        fontFamily: fonts.family.primaryMedium,
+        fontSize: fonts.size.font11,
+        fontFamily: fonts.family.secondaryRegular,
         textDecorationLine: 'line-through',
-        marginBottom: 1,
+        marginBottom: 2,
     },
     gridPrice: {
-        fontSize: fonts.size.font14,
+        fontSize: fonts.size.font15,
         fontFamily: fonts.family.primaryBold,
     },
     cartButton: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
         justifyContent: 'center',
         alignItems: 'center',
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
+    },
+    quickAdjustWrap: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
 });

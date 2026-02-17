@@ -7,7 +7,9 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 import MainContainer from '../../container/MainContainer';
 import { useTheme } from '../../contexts/ThemeProvider';
+import { useCart } from '../../contexts/CardContext';
 import AppTouchableRipple from '../../components/AppTouchableRipple';
+import FloatingCartBar, { getFloatingCartBarReservedPadding } from '../../components/FloatingCartBar';
 import EmptyData, { EmptyDataType } from '../../components/EmptyData';
 import { CategoryCard } from '../../listItems';
 import VoiceSearchButton from '../../components/VoiceSearchButton';
@@ -218,6 +220,7 @@ const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ navigation }) => {
     const colors = useTheme();
     const insets = useSafeAreaInsets();
     const searchInputRef = useRef<TextInput>(null);
+    const { cartCount, cartTotal, cartItems, clearCart } = useCart();
 
     // ============================================================================
     // STATE
@@ -235,12 +238,17 @@ const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ navigation }) => {
         [categories, searchQuery]
     );
 
+    const floatingBarPadding = useMemo(
+        () => getFloatingCartBarReservedPadding(insets),
+        [insets]
+    );
+
     const listContentStyle = useMemo(
         () => ({
             ...styles.listContainer,
-            paddingBottom: 32 + insets.bottom,
+            paddingBottom: cartCount > 0 ? floatingBarPadding : 32 + insets.bottom,
         }),
-        [insets.bottom]
+        [insets.bottom, cartCount, floatingBarPadding]
     );
 
     const showEmptyState = !loading && filteredCategories.length === 0;
@@ -411,6 +419,17 @@ const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ navigation }) => {
                 language={VOICE_SEARCH_DISPLAY_LANGUAGE}
                 colors={colors}
                 onClose={stopListening}
+            />
+
+            {/* Floating cart bar above tab bar */}
+            <FloatingCartBar
+                itemCount={cartCount}
+                total={cartTotal}
+                firstItemImage={cartItems[0]?.image}
+                firstItemName={cartItems[0]?.name}
+                onCheckout={() => navigation.navigate(constant.routeName.cart)}
+                onViewCart={() => navigation.navigate(constant.routeName.cart)}
+                onClearCart={clearCart}
             />
         </MainContainer>
     );

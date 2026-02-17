@@ -5,6 +5,8 @@ import { AppColors } from '../styles/colors';
 import fonts from '../styles/fonts';
 import { getImageUrl, getStockStatus } from './utils';
 import { Product } from '../screens/front/ProductListScreen';
+import CartQuickAdjust from '../components/CartQuickAdjust';
+import { MAX_CART_QUANTITY_PER_ITEM } from '../contexts/CardContext';
 
 // ============================================================================
 // TYPES
@@ -14,6 +16,9 @@ export interface ProductListItemProps {
     onPress: (product: Product) => void;
     onAddToCart: (product: Product) => void;
     isInCart: boolean;
+    cartQuantity?: number;
+    onUpdateQuantity?: (productId: number, quantity: number) => void;
+    onRemoveFromCart?: (productId: number) => void;
     colors: AppColors;
     onToggleFavorite?: (product: Product) => void;
     isFavorite?: boolean;
@@ -48,13 +53,12 @@ const PriceDisplay = memo(({
 
     return (
         <View>
-            <Text style={[styles.priceLabel, { color: colors.textLabel }]}>Price</Text>
             {showActualPrice && (
-                <Text style={[styles.actualPriceList, { color: colors.textGrey }]}>
+                <Text style={[styles.actualPriceList, { color: colors.textDescription }]}>
                     {formatPrice(actualPrice!)}
                 </Text>
             )}
-            <Text style={[styles.listPrice, { color: colors.themePrimary }]}>
+            <Text style={[styles.listPrice, { color: colors.textPrimary }]}>
                 {formatPrice(price)}
             </Text>
         </View>
@@ -71,6 +75,9 @@ const ProductListItem: React.FC<ProductListItemProps> = memo(({
     onPress,
     onAddToCart,
     isInCart,
+    cartQuantity = 0,
+    onUpdateQuantity,
+    onRemoveFromCart,
     colors,
     onToggleFavorite,
     isFavorite = false
@@ -171,12 +178,26 @@ const ProductListItem: React.FC<ProductListItemProps> = memo(({
                                     {stockStatus.label}
                                 </Text>
                             </View>
+                            {isInCart && cartQuantity > 0 && onUpdateQuantity && onRemoveFromCart ? (
+                                <View style={styles.quickAdjustWrap} onStartShouldSetResponder={() => true}>
+                                    <CartQuickAdjust
+                                        quantity={cartQuantity}
+                                        onIncrease={() => onUpdateQuantity(item.id, cartQuantity + 1)}
+                                        onDecrease={() => onUpdateQuantity(item.id, cartQuantity - 1)}
+                                        onRemove={() => onRemoveFromCart(item.id)}
+                                        maxQuantity={Math.min(item.stock, MAX_CART_QUANTITY_PER_ITEM)}
+                                        disabled={item.stock === 0}
+                                        colors={colors}
+                                        variant="list"
+                                    />
+                                </View>
+                            ) : (
                             <TouchableOpacity
                                 style={[
                                     styles.cartButton,
                                     {
-                                        backgroundColor: isInCart ? colors.themePrimary : colors.themePrimaryLight,
-                                        opacity: item.stock === 0 ? 0.5 : 1
+                                        backgroundColor: item.stock === 0 ? colors.buttonDisabled : colors.themePrimary,
+                                        opacity: item.stock === 0 ? 0.6 : 1,
                                     }
                                 ]}
                                 onPress={handleAddToCartPress}
@@ -185,11 +206,12 @@ const ProductListItem: React.FC<ProductListItemProps> = memo(({
                                 activeOpacity={0.7}
                             >
                                 <Icon
-                                    name={isInCart ? "check" : "cart-plus"}
-                                    size={20}
-                                    color={isInCart ? colors.white : colors.themePrimary}
+                                    name="cart-plus"
+                                    size={18}
+                                    color={colors.white}
                                 />
                             </TouchableOpacity>
+                            )}
                         </View>
                     </View>
                 </View>
@@ -207,23 +229,23 @@ export default ProductListItem;
 // ============================================================================
 const styles = StyleSheet.create({
     listCard: {
-        borderRadius: 16,
-        padding: 12,
-        marginBottom: 12,
+        borderRadius: 18,
+        padding: 14,
+        marginBottom: 14,
         elevation: 2,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
     },
     listContent: {
         flexDirection: 'row',
-        gap: 12,
+        gap: 14,
     },
     listImageContainer: {
         width: 100,
         height: 100,
-        borderRadius: 12,
+        borderRadius: 14,
         overflow: 'hidden',
         position: 'relative',
     },
@@ -239,11 +261,11 @@ const styles = StyleSheet.create({
     },
     listStockBadge: {
         position: 'absolute',
-        top: 6,
-        right: 6,
-        paddingHorizontal: 6,
-        paddingVertical: 3,
-        borderRadius: 10,
+        top: 8,
+        right: 8,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
         minWidth: 24,
         alignItems: 'center',
     },
@@ -253,28 +275,28 @@ const styles = StyleSheet.create({
     },
     favoriteButton: {
         position: 'absolute',
-        top: 6,
-        left: 6,
+        top: 8,
+        left: 8,
         width: 32,
         height: 32,
         borderRadius: 16,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.9)',
-        elevation: 2,
+        backgroundColor: 'rgba(255,255,255,0.92)',
+        elevation: 1,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
         shadowRadius: 4,
     },
     listInfo: {
         flex: 1,
-        gap: 4,
+        gap: 6,
     },
     categoryTag: {
-        paddingHorizontal: 6,
-        paddingVertical: 3,
-        borderRadius: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
         marginBottom: 6,
         alignSelf: 'flex-start',
     },
@@ -282,6 +304,7 @@ const styles = StyleSheet.create({
         fontSize: fonts.size.font9,
         fontFamily: fonts.family.primaryBold,
         textTransform: 'uppercase',
+        letterSpacing: 0.4,
     },
     listProductName: {
         fontSize: fonts.size.font16,
@@ -290,7 +313,7 @@ const styles = StyleSheet.create({
     listDescription: {
         fontSize: fonts.size.font12,
         fontFamily: fonts.family.secondaryRegular,
-        lineHeight: 16,
+        lineHeight: 18,
     },
     listFooter: {
         flexDirection: 'row',
@@ -298,16 +321,11 @@ const styles = StyleSheet.create({
         alignItems: 'flex-end',
         marginTop: 'auto',
     },
-    priceLabel: {
-        fontSize: fonts.size.font9,
-        fontFamily: fonts.family.secondaryRegular,
-        marginBottom: 2,
-    },
     actualPriceList: {
         fontSize: fonts.size.font12,
-        fontFamily: fonts.family.primaryMedium,
+        fontFamily: fonts.family.secondaryRegular,
         textDecorationLine: 'line-through',
-        marginBottom: 1,
+        marginBottom: 2,
     },
     listPrice: {
         fontSize: fonts.size.font18,
@@ -316,16 +334,16 @@ const styles = StyleSheet.create({
     listActions: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: 10,
     },
     stockStatus: {
         flexDirection: 'row',
         alignItems: 'center',
         alignSelf: 'flex-start',
-        paddingHorizontal: 6,
-        paddingVertical: 3,
-        borderRadius: 10,
-        gap: 3,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        gap: 4,
     },
     stockStatusText: {
         fontSize: fonts.size.font9,
@@ -337,10 +355,9 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         justifyContent: 'center',
         alignItems: 'center',
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
+    },
+    quickAdjustWrap: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
 });

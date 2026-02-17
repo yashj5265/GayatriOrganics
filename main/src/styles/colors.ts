@@ -41,27 +41,27 @@ export interface AppColors {
 }
 
 export const lightTheme: AppColors = {
-    themePrimary: '#4CAF50', // ✅ Organic Green
-    themeSecondary: '#2E7D32',
-    themePrimaryLight: 'rgba(76, 175, 80, 0.15)',
-    rippleColor: 'rgba(76, 175, 80, 0.1)',
+    themePrimary: '#2D8A3E', // Refined organic green
+    themeSecondary: '#1B5E20',
+    themePrimaryLight: 'rgba(45, 138, 62, 0.12)',
+    rippleColor: 'rgba(45, 138, 62, 0.08)',
 
     backgroundPrimary: '#FFFFFF',
-    backgroundSecondary: '#F8FFF8',
+    backgroundSecondary: '#FAFBFA',
 
-    textPrimary: '#1B1B1B',
-    textSecondary: '#4CAF50',
-    textLabel: '#888888',
-    textDescription: '#666666',
+    textPrimary: '#1A1A1A',
+    textSecondary: '#2D8A3E',
+    textLabel: '#6B7280',
+    textDescription: '#6B7280',
     textInputText: '#212121',
     textInputPlaceholder: '#BDBDBD',
 
     border: '#E0E0E0',
     separator: '#F1F1F1',
 
-    buttonPrimaryBackground: '#4CAF50',
+    buttonPrimaryBackground: '#2D8A3E',
     buttonPrimaryText: '#FFFFFF',
-    buttonDisabled: '#A5D6A7',
+    buttonDisabled: '#9CAE9E',
 
     inputErrorText: '#D32F2F',
 

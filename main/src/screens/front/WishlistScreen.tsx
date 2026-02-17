@@ -128,7 +128,7 @@ const WishlistScreen: React.FC<WishlistScreenNavigationProps> = ({ navigation })
     const colors = useTheme();
     const insets = useSafeAreaInsets();
     const { wishlistItems, removeFromWishlist, isInWishlist } = useWishlist();
-    const { addToCart, isInCart } = useCart();
+    const { addToCart, isInCart, getCartItem, updateQuantity, removeFromCart } = useCart();
 
     // ============================================================================
     // STATE
@@ -214,6 +214,9 @@ const WishlistScreen: React.FC<WishlistScreenNavigationProps> = ({ navigation })
                 onPress={handleProductPress}
                 onAddToCart={handleAddToCart}
                 isInCart={isInCart(item.id)}
+                cartQuantity={getCartItem(item.id)?.quantity ?? 0}
+                onUpdateQuantity={updateQuantity}
+                onRemoveFromCart={removeFromCart}
                 colors={colors}
                 onToggleFavorite={handleToggleFavorite}
                 isFavorite={isInWishlist(item.id)}
@@ -223,6 +226,9 @@ const WishlistScreen: React.FC<WishlistScreenNavigationProps> = ({ navigation })
             handleProductPress,
             handleAddToCart,
             isInCart,
+            getCartItem,
+            updateQuantity,
+            removeFromCart,
             colors,
             handleToggleFavorite,
             isInWishlist,
@@ -236,6 +242,9 @@ const WishlistScreen: React.FC<WishlistScreenNavigationProps> = ({ navigation })
                 onPress={handleProductPress}
                 onAddToCart={handleAddToCart}
                 isInCart={isInCart(item.id)}
+                cartQuantity={getCartItem(item.id)?.quantity ?? 0}
+                onUpdateQuantity={updateQuantity}
+                onRemoveFromCart={removeFromCart}
                 colors={colors}
                 onToggleFavorite={handleToggleFavorite}
                 isFavorite={isInWishlist(item.id)}
@@ -245,6 +254,9 @@ const WishlistScreen: React.FC<WishlistScreenNavigationProps> = ({ navigation })
             handleProductPress,
             handleAddToCart,
             isInCart,
+            getCartItem,
+            updateQuantity,
+            removeFromCart,
             colors,
             handleToggleFavorite,
             isInWishlist,

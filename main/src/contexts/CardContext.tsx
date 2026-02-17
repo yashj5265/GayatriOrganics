@@ -46,6 +46,9 @@ interface CartProviderProps {
 
 const CART_STORAGE_KEY = '@GOFManager:cart_items' as StorageKey;
 
+/** API limit: max quantity per cart item */
+export const MAX_CART_QUANTITY_PER_ITEM = 6;
+
 // ============================================================================
 // CONTEXT
 // ============================================================================
@@ -265,7 +268,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
      * Adds item to cart
      */
     const addToCart = useCallback(async (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => {
-        const quantityToAdd = item.quantity || 1;
+        const quantityToAdd = Math.min(item.quantity || 1, MAX_CART_QUANTITY_PER_ITEM);
 
         // Optimistically update local state
         updateLocalCartState(item.id, quantityToAdd, item);
@@ -360,13 +363,15 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     }, [cartItems, fetchCartFromApi]);
 
     /**
-     * Updates item quantity in cart
+     * Updates item quantity in cart (API max is MAX_CART_QUANTITY_PER_ITEM)
      */
     const updateQuantity = useCallback(async (itemId: number, quantity: number) => {
         if (quantity <= 0) {
             await removeFromCart(itemId);
             return;
         }
+
+        const clampedQty = Math.min(quantity, MAX_CART_QUANTITY_PER_ITEM);
 
         try {
             const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
@@ -375,7 +380,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
             if (token && cartItem?.cartItemId) {
                 const response = await ApiManager.put({
                     endpoint: `${constant.apiEndPoints.updateCart}/${cartItem.cartItemId}`,
-                    params: { quantity },
+                    params: { quantity: clampedQty },
                     token,
                     showError: true,
                     showSuccess: false,
@@ -392,14 +397,14 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
             // Fallback to local state update
             setCartItems((prevItems) =>
                 prevItems.map((item) =>
-                    item.id === itemId ? { ...item, quantity } : item
+                    item.id === itemId ? { ...item, quantity: clampedQty } : item
                 )
             );
         } catch (error) {
             console.error('Error updating cart quantity:', error);
             setCartItems((prevItems) =>
                 prevItems.map((item) =>
-                    item.id === itemId ? { ...item, quantity } : item
+                    item.id === itemId ? { ...item, quantity: clampedQty } : item
                 )
             );
         }

@@ -2,14 +2,17 @@ import React, { useEffect, useState, useCallback, useMemo, memo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Image, ActivityIndicator, Linking } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 import MainContainer from '../../container/MainContainer';
 import { useTheme } from '../../contexts/ThemeProvider';
-import { useCart } from '../../contexts/CardContext';
+import { useCart, MAX_CART_QUANTITY_PER_ITEM } from '../../contexts/CardContext';
 import { useAddress, Address } from '../../contexts/AddressContext';
 import { useWishlist } from '../../contexts/WishlistContext';
 import AppTouchableRipple from '../../components/AppTouchableRipple';
+import CartQuickAdjust from '../../components/CartQuickAdjust';
+import FloatingCartBar, { getFloatingCartBarReservedPadding } from '../../components/FloatingCartBar';
 import BannerCarousel, { Banner } from '../../components/BannerCarousel';
 import VoiceSearchButton from '../../components/VoiceSearchButton';
 import VoiceSearchOverlay from '../../popups/VoiceSearchOverlay';
@@ -102,8 +105,13 @@ interface CategoryCardProps {
 interface ProductCardProps {
     product: ProductListProduct;
     isInCart: boolean;
+    cartQuantity?: number;
     onPress: (product: ProductListProduct) => void;
     onAddToCart: (product: ProductListProduct) => void;
+    onUpdateQuantity?: (productId: number, quantity: number) => void;
+    onRemoveFromCart?: (productId: number) => void;
+    onToggleFavorite?: (product: ProductListProduct) => void;
+    isFavorite?: boolean;
 }
 
 interface SectionProps {
@@ -347,26 +355,52 @@ const CategoryCard = memo(({ category, index, onPress }: CategoryCardProps) => {
     );
 });
 
-const ProductCard = memo(({ product, isInCart, onPress, onAddToCart }: ProductCardProps) => {
+const ProductCard = memo(({ product, isInCart, cartQuantity = 0, onPress, onAddToCart, onUpdateQuantity, onRemoveFromCart, onToggleFavorite, isFavorite = false }: ProductCardProps) => {
     const colors = useTheme();
     const imageUrl = product.image1 ? `${BASE_IMAGE_URL}${product.image1}` : null;
+    const showQuickAdjust = isInCart && cartQuantity > 0 && onUpdateQuantity && onRemoveFromCart;
+    const productStock = typeof product.stock === 'number' ? product.stock : 999;
+
+    const handleFavoritePress = useCallback(
+        (e: any) => {
+            e?.stopPropagation();
+            onToggleFavorite?.(product);
+        },
+        [product, onToggleFavorite]
+    );
 
     return (
         <TouchableOpacity
             style={[styles.productCard, { backgroundColor: colors.backgroundSecondary }]}
             onPress={() => onPress(product)}
         >
-            {imageUrl ? (
-                <Image
-                    source={{ uri: imageUrl }}
-                    style={styles.productImage}
-                    resizeMode="cover"
-                />
-            ) : (
-                <View style={[styles.productImagePlaceholder, { backgroundColor: colors.themePrimaryLight }]}>
-                    <Icon name="image-off" size={32} color={colors.themePrimary} />
-                </View>
-            )}
+            <View style={styles.productImageWrapper}>
+                {imageUrl ? (
+                    <Image
+                        source={{ uri: imageUrl }}
+                        style={styles.productImage}
+                        resizeMode="cover"
+                    />
+                ) : (
+                    <View style={[styles.productImagePlaceholder, { backgroundColor: colors.themePrimaryLight }]}>
+                        <Icon name="image-off" size={32} color={colors.themePrimary} />
+                    </View>
+                )}
+                {onToggleFavorite && (
+                    <TouchableOpacity
+                        style={styles.wishlistBtn}
+                        activeOpacity={0.7}
+                        onPress={handleFavoritePress}
+                        onPressIn={(e) => e.stopPropagation()}
+                    >
+                        <Icon
+                            name={isFavorite ? 'heart' : 'heart-outline'}
+                            size={16}
+                            color={isFavorite ? '#FF5252' : colors.themePrimary}
+                        />
+                    </TouchableOpacity>
+                )}
+            </View>
 
             <Text style={[styles.productName, { color: colors.textPrimary }]} numberOfLines={2}>
                 {product.name}
@@ -383,35 +417,42 @@ const ProductCard = memo(({ product, isInCart, onPress, onAddToCart }: ProductCa
                             {formatPrice(product.actual_price!)}
                         </Text>
                     )}
-                    <Text style={[styles.productPrice, { color: colors.themePrimary }]}>
+                    <Text style={[styles.productPrice, { color: colors.textPrimary }]}>
                         {formatPrice(product.price)}
                     </Text>
                 </View>
-                <AppTouchableRipple
-                    style={[
-                        styles.addButton,
-                        {
-                            backgroundColor: isInCart
-                                ? colors.themePrimary
-                                : colors.themePrimaryLight,
-                        },
-                    ]}
-                    onPress={(e) => {
-                        e?.stopPropagation();
-                        onAddToCart(product);
-                    }}
-                >
-                    <Text
+                {showQuickAdjust ? (
+                    <View onStartShouldSetResponder={() => true}>
+                        <CartQuickAdjust
+                            quantity={cartQuantity}
+                            onIncrease={() => onUpdateQuantity!(product.id, cartQuantity + 1)}
+                            onDecrease={() => onUpdateQuantity!(product.id, cartQuantity - 1)}
+                            onRemove={() => onRemoveFromCart!(product.id)}
+                            maxQuantity={Math.min(productStock, MAX_CART_QUANTITY_PER_ITEM)}
+                            disabled={productStock === 0}
+                            colors={colors}
+                            variant="grid"
+                        />
+                    </View>
+                ) : (
+                    <TouchableOpacity
                         style={[
-                            styles.addButtonText,
+                            styles.addButton,
                             {
-                                color: isInCart ? colors.white : colors.themePrimary,
+                                backgroundColor: productStock === 0 ? colors.buttonDisabled : colors.themePrimary,
+                                opacity: productStock === 0 ? 0.6 : 1,
                             },
                         ]}
+                        onPress={(e) => {
+                            e?.stopPropagation();
+                            onAddToCart(product);
+                        }}
+                        disabled={productStock === 0}
+                        activeOpacity={0.7}
                     >
-                        {isInCart ? '✓' : '+'}
-                    </Text>
-                </AppTouchableRipple>
+                        <Icon name="cart-plus" size={18} color={colors.white} />
+                    </TouchableOpacity>
+                )}
             </View>
         </TouchableOpacity>
     );
@@ -460,15 +501,25 @@ const FeaturedProductsSection = memo(({
     products,
     loading,
     isInCart,
+    getCartQuantity,
     onProductPress,
     onAddToCart,
+    onUpdateQuantity,
+    onRemoveFromCart,
+    onToggleFavorite,
+    isInWishlist,
     onViewAll,
 }: {
     products: ProductListProduct[];
     loading: boolean;
     isInCart: (id: number) => boolean;
+    getCartQuantity: (productId: number) => number;
     onProductPress: (product: ProductListProduct) => void;
     onAddToCart: (product: ProductListProduct) => void;
+    onUpdateQuantity?: (productId: number, quantity: number) => void;
+    onRemoveFromCart?: (productId: number) => void;
+    onToggleFavorite?: (product: ProductListProduct) => void;
+    isInWishlist?: (id: number) => boolean;
     onViewAll: () => void;
 }) => {
     return (
@@ -484,8 +535,13 @@ const FeaturedProductsSection = memo(({
                             key={product.id}
                             product={product}
                             isInCart={isInCart(product.id)}
+                            cartQuantity={getCartQuantity(product.id)}
                             onPress={onProductPress}
                             onAddToCart={onAddToCart}
+                            onUpdateQuantity={onUpdateQuantity}
+                            onRemoveFromCart={onRemoveFromCart}
+                            onToggleFavorite={onToggleFavorite}
+                            isFavorite={isInWishlist?.(product.id) ?? false}
                         />
                     ))}
                 </View>
@@ -523,8 +579,13 @@ const WhyChooseUsSection = memo(() => {
 // ============================================================================
 const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     const colors = useTheme();
-    const { addToCart, isInCart, cartCount } = useCart();
-    const { wishlistCount } = useWishlist();
+    const insets = useSafeAreaInsets();
+    const { addToCart, isInCart, cartCount, cartTotal, cartItems, getCartItem, updateQuantity, removeFromCart, clearCart } = useCart();
+    const floatingBarPadding = useMemo(
+        () => getFloatingCartBarReservedPadding(insets),
+        [insets]
+    );
+    const { wishlistCount, addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
     const { selectedAddress, addresses, selectAddress } = useAddress();
 
     // ============================================================================
@@ -745,6 +806,26 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         navigation.navigate(constant.routeName.cart);
     }, [navigation]);
 
+    const handleToggleFavorite = useCallback(
+        (product: ProductListProduct) => {
+            if (isInWishlist(product.id)) {
+                removeFromWishlist(product.id);
+            } else {
+                addToWishlist({
+                    id: product.id,
+                    name: product.name,
+                    price: product.price,
+                    image1: product.image1,
+                    category_id: product.category_id || product.category?.id || 0,
+                    category: product.category || { id: 0, name: '' },
+                    stock: product.stock,
+                    description: product.description || '',
+                });
+            }
+        },
+        [isInWishlist, addToWishlist, removeFromWishlist]
+    );
+
     // ============================================================================
     // CART HANDLERS
     // ============================================================================
@@ -953,6 +1034,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         >
             <ScrollView
                 style={[styles.container, { backgroundColor: colors.backgroundPrimary }]}
+                contentContainerStyle={cartCount > 0 ? { paddingBottom: floatingBarPadding } : undefined}
                 showsVerticalScrollIndicator={false}
             >
                 {/* Header */}
@@ -996,8 +1078,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                     products={featuredProducts}
                     loading={productsLoading}
                     isInCart={isInCart}
+                    getCartQuantity={(id) => getCartItem(id)?.quantity ?? 0}
                     onProductPress={handleProductPress}
                     onAddToCart={handleAddToCart}
+                    onUpdateQuantity={updateQuantity}
+                    onRemoveFromCart={removeFromCart}
+                    onToggleFavorite={handleToggleFavorite}
+                    isInWishlist={isInWishlist}
                     onViewAll={handleViewAllProducts}
                 />
 
@@ -1023,6 +1110,17 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 language={VOICE_SEARCH_DISPLAY_LANGUAGE}
                 colors={colors}
                 onClose={stopListening}
+            />
+
+            {/* Floating cart bar above tab bar */}
+            <FloatingCartBar
+                itemCount={cartCount}
+                total={cartTotal}
+                firstItemImage={cartItems[0]?.image}
+                firstItemName={cartItems[0]?.name}
+                onCheckout={() => navigation.navigate(constant.routeName.cart)}
+                onViewCart={() => navigation.navigate(constant.routeName.cart)}
+                onClearCart={clearCart}
             />
         </MainContainer>
     );
@@ -1226,72 +1324,88 @@ const styles = StyleSheet.create({
     productsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 12,
+        gap: 14,
     },
     productCard: {
-        width: '48%',
-        padding: 12,
-        borderRadius: 12,
+        width: '47%',
+        padding: 14,
+        borderRadius: 16,
         elevation: 2,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+    },
+    productImageWrapper: {
+        position: 'relative',
+        marginBottom: 10,
     },
     productImage: {
         width: '100%',
-        height: 120,
-        borderRadius: 8,
-        marginBottom: 8,
-        backgroundColor: '#f0f0f0',
+        height: 118,
+        borderRadius: 12,
+        backgroundColor: '#f5f5f5',
     },
     productImagePlaceholder: {
         width: '100%',
-        height: 120,
-        borderRadius: 8,
-        marginBottom: 8,
+        height: 118,
+        borderRadius: 12,
         justifyContent: 'center',
         alignItems: 'center',
     },
+    wishlistBtn: {
+        position: 'absolute',
+        top: 8,
+        left: 8,
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.92)',
+        elevation: 1,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 4,
+    },
     productName: {
-        fontSize: fonts.size.font14,
-        fontFamily: fonts.family.primaryMedium,
-        marginBottom: 2,
+        fontSize: fonts.size.font13,
+        fontFamily: fonts.family.primaryBold,
+        marginBottom: 4,
         minHeight: 36,
+        lineHeight: 18,
     },
     productUnit: {
         fontSize: fonts.size.font11,
         fontFamily: fonts.family.secondaryRegular,
-        marginBottom: 8,
+        marginBottom: 10,
     },
     productFooter: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        gap: 8,
     },
     priceContainer: {
         flex: 1,
     },
     actualPrice: {
-        fontSize: fonts.size.font12,
-        fontFamily: fonts.family.primaryMedium,
+        fontSize: fonts.size.font11,
+        fontFamily: fonts.family.secondaryRegular,
         textDecorationLine: 'line-through',
         marginBottom: 2,
     },
     productPrice: {
-        fontSize: fonts.size.font16,
+        fontSize: fonts.size.font15,
         fontFamily: fonts.family.primaryBold,
     },
     addButton: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
         justifyContent: 'center',
         alignItems: 'center',
-    },
-    addButtonText: {
-        fontSize: fonts.size.font20,
-        fontFamily: fonts.family.primaryBold,
     },
     featuresCard: {
         borderRadius: 16,

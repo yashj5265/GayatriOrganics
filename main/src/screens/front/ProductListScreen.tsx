@@ -380,7 +380,7 @@ const ProductListScreen: React.FC<ProductListScreenNavigationProps> = ({
 }) => {
     const colors = useTheme();
     const insets = useSafeAreaInsets();
-    const { addToCart, isInCart } = useCart();
+    const { addToCart, isInCart, getCartItem, updateQuantity, removeFromCart } = useCart();
     const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
     const searchInputRef = useRef<TextInput>(null);
     const scrollY = useRef(new Animated.Value(0)).current;
@@ -648,6 +648,9 @@ const ProductListScreen: React.FC<ProductListScreenNavigationProps> = ({
                 onPress={handleProductPress}
                 onAddToCart={handleAddToCart}
                 isInCart={isInCart(item.id)}
+                cartQuantity={getCartItem(item.id)?.quantity ?? 0}
+                onUpdateQuantity={updateQuantity}
+                onRemoveFromCart={removeFromCart}
                 colors={colors}
                 onToggleFavorite={handleToggleFavorite}
                 isFavorite={isInWishlist(item.id)}
@@ -657,6 +660,9 @@ const ProductListScreen: React.FC<ProductListScreenNavigationProps> = ({
             handleProductPress,
             handleAddToCart,
             isInCart,
+            getCartItem,
+            updateQuantity,
+            removeFromCart,
             colors,
             handleToggleFavorite,
             isInWishlist,
@@ -670,6 +676,9 @@ const ProductListScreen: React.FC<ProductListScreenNavigationProps> = ({
                 onPress={handleProductPress}
                 onAddToCart={handleAddToCart}
                 isInCart={isInCart(item.id)}
+                cartQuantity={getCartItem(item.id)?.quantity ?? 0}
+                onUpdateQuantity={updateQuantity}
+                onRemoveFromCart={removeFromCart}
                 colors={colors}
                 onToggleFavorite={handleToggleFavorite}
                 isFavorite={isInWishlist(item.id)}
@@ -679,6 +688,9 @@ const ProductListScreen: React.FC<ProductListScreenNavigationProps> = ({
             handleProductPress,
             handleAddToCart,
             isInCart,
+            getCartItem,
+            updateQuantity,
+            removeFromCart,
             colors,
             handleToggleFavorite,
             isInWishlist,
