@@ -1,6 +1,3 @@
-// ============================================================================
-// ProductGridItem.tsx - REFACTORED
-// ============================================================================
 import React, { useState, useCallback, useMemo, memo } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -10,6 +7,10 @@ import { getImageUrl, getStockStatus } from './utils';
 import { Product } from '../screens/front/ProductListScreen';
 import CartQuickAdjust from '../components/CartQuickAdjust';
 import { MAX_CART_QUANTITY_PER_ITEM } from '../contexts/CardContext';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface ProductGridItemProps {
     item: Product;
@@ -24,22 +25,27 @@ export interface ProductGridItemProps {
     isFavorite?: boolean;
 }
 
-// ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
-const formatPrice = (price: string | number): string => {
-    return `₹${parseFloat(price.toString()).toFixed(2)}`;
-};
+// ─────────────────────────────────────────────────────────────────────────────
+// UTILITIES
+// ─────────────────────────────────────────────────────────────────────────────
 
+const formatPrice = (price: string | number): string =>
+    `₹${parseFloat(price.toString()).toFixed(2)}`;
+
+/**
+ * Only show the strikethrough "actual price" when it differs from the selling price.
+ */
 const shouldShowActualPrice = (actualPrice?: string, currentPrice?: string): boolean => {
     if (!actualPrice || actualPrice === '0' || actualPrice === '0.00') return false;
     if (!currentPrice) return false;
     return parseFloat(actualPrice) !== parseFloat(currentPrice);
 };
 
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 // SUB-COMPONENTS
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Shows selling price and, when relevant, the struck-through original price. */
 const PriceDisplay = memo(({
     price,
     actualPrice,
@@ -50,26 +56,25 @@ const PriceDisplay = memo(({
     colors: AppColors;
 }) => {
     const showActualPrice = shouldShowActualPrice(actualPrice, price);
-
     return (
-        <View style={styles.priceContainer}>
+        <View>
             {showActualPrice && (
-                <Text style={[styles.actualPrice, { color: colors.textDescription }]}>
+                <Text style={[styles.strikePrice, { color: colors.textDescription }]}>
                     {formatPrice(actualPrice!)}
                 </Text>
             )}
-            <Text style={[styles.gridPrice, { color: colors.textPrimary }]}>
+            <Text style={[styles.price, { color: colors.textPrimary }]}>
                 {formatPrice(price)}
             </Text>
         </View>
     );
 });
-
 PriceDisplay.displayName = 'PriceDisplay';
 
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 // MAIN COMPONENT
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
+
 const ProductGridItem: React.FC<ProductGridItemProps> = memo(({
     item,
     onPress,
@@ -80,105 +85,118 @@ const ProductGridItem: React.FC<ProductGridItemProps> = memo(({
     onRemoveFromCart,
     colors,
     onToggleFavorite,
-    isFavorite = false
+    isFavorite = false,
 }) => {
     const stockStatus = useMemo(() => getStockStatus(item.stock), [item.stock]);
     const [imageError, setImageError] = useState(false);
 
-    const handleImageError = useCallback(() => {
-        setImageError(true);
-    }, []);
+    const handleImageError = useCallback(() => setImageError(true), []);
+    const handlePress = useCallback(() => onPress(item), [item, onPress]);
+    const handleAddToCart = useCallback(() => onAddToCart(item), [item, onAddToCart]);
+    const handleFavorite = useCallback(() => onToggleFavorite?.(item), [item, onToggleFavorite]);
 
-    const handlePress = useCallback(() => {
-        onPress(item);
-    }, [item, onPress]);
-
-    const handleAddToCartPress = useCallback(() => {
-        onAddToCart(item);
-    }, [item, onAddToCart]);
-
-    const handleFavoritePress = useCallback(() => {
-        onToggleFavorite?.(item);
-    }, [item, onToggleFavorite]);
-
-    const cardStyle = useMemo(() => ({
-        ...styles.gridCard,
-        backgroundColor: colors.backgroundSecondary
-    }), [colors.backgroundSecondary]);
+    /** True when the quantity stepper should replace the "add" button. */
+    const showStepper = isInCart && cartQuantity > 0 && !!onUpdateQuantity && !!onRemoveFromCart;
 
     return (
         <TouchableOpacity
-            style={cardStyle}
+            style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}
             onPress={handlePress}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
         >
-            <View style={styles.gridImageContainer}>
+            {/* ── Product image with overlaid badges ── */}
+            <View style={styles.imageWrapper}>
                 {item.image1 && !imageError ? (
                     <Image
                         source={{ uri: getImageUrl(item.image1) }}
-                        style={styles.gridImage}
+                        style={styles.image}
                         resizeMode="cover"
                         onError={handleImageError}
                     />
                 ) : (
-                    <View style={[styles.gridImagePlaceholder, { backgroundColor: colors.themePrimaryLight }]}>
-                        <Icon name="image-off" size={32} color={colors.themePrimary} />
+                    <View style={[styles.imagePlaceholder, { backgroundColor: colors.themePrimaryLight }]}>
+                        <Icon name="image-off" size={28} color={colors.themePrimary} />
                     </View>
                 )}
 
+                {/* Stock count badge – top-right */}
                 <View style={[styles.stockBadge, { backgroundColor: stockStatus.bgColor }]}>
                     <Text style={[styles.stockBadgeText, { color: stockStatus.color }]}>
                         {item.stock}
                     </Text>
                 </View>
 
+                {/* Wishlist button – top-left */}
                 {onToggleFavorite && (
                     <TouchableOpacity
                         style={styles.wishlistBtn}
                         activeOpacity={0.7}
-                        onPressIn={(e) => e.stopPropagation()}
-                        onPress={handleFavoritePress}
+                        onPressIn={e => e.stopPropagation()}
+                        onPress={handleFavorite}
                     >
                         <Icon
-                            name={isFavorite ? "heart" : "heart-outline"}
-                            size={16}
-                            color={isFavorite ? "#FF5252" : colors.themePrimary}
+                            name={isFavorite ? 'heart' : 'heart-outline'}
+                            size={14}
+                            color={isFavorite ? '#FF5252' : colors.themePrimary}
                         />
                     </TouchableOpacity>
                 )}
             </View>
 
-            <View style={styles.gridContent}>
-                <View style={[styles.categoryTag, { backgroundColor: colors.themePrimaryLight }]}>
-                    <Text style={[styles.categoryTagText, { color: colors.themePrimary }]} numberOfLines={1}>
+            {/* ── Card body ── */}
+            <View style={styles.body}>
+                {/* Category chip */}
+                <View style={[styles.categoryChip, { backgroundColor: colors.themePrimaryLight }]}>
+                    <Text
+                        style={[styles.categoryChipText, { color: colors.themePrimary }]}
+                        numberOfLines={1}
+                    >
                         {item.category.name}
                     </Text>
                 </View>
 
-                <Text style={[styles.gridProductName, { color: colors.textPrimary }]} numberOfLines={2}>
+                {/* Product name */}
+                <Text
+                    style={[styles.productName, { color: colors.textPrimary }]}
+                    numberOfLines={2}
+                >
                     {item.name}
                 </Text>
 
-                <View style={[styles.stockStatus, { backgroundColor: stockStatus.bgColor }]}>
-                    <Icon name="package-variant" size={12} color={stockStatus.color} />
-                    <Text style={[styles.stockStatusText, { color: stockStatus.color }]}>
+                {/* Stock status label */}
+                <View style={[styles.stockLabel, { backgroundColor: stockStatus.bgColor }]}>
+                    <Icon name="package-variant" size={10} color={stockStatus.color} />
+                    <Text style={[styles.stockLabelText, { color: stockStatus.color }]}>
                         {stockStatus.label}
                     </Text>
                 </View>
 
-                <View style={styles.gridFooter}>
+                {/* ── Footer: price row + action ──────────────────────────────
+                 *  LAYOUT RULE:
+                 *  • Default state  → row  (price left, cart-icon button right)
+                 *  • In-cart state  → column (price on top, stepper below)
+                 *
+                 *  Keeping them separate avoids the stepper overflowing the
+                 *  narrow grid-column width.
+                 * ─────────────────────────────────────────────────────────── */}
+                <View style={styles.footer}>
                     <PriceDisplay
                         price={item.price}
                         actualPrice={item.actual_price}
                         colors={colors}
                     />
-                    {isInCart && cartQuantity > 0 && onUpdateQuantity && onRemoveFromCart ? (
-                        <View style={styles.quickAdjustWrap} onStartShouldSetResponder={() => true}>
+
+                    {showStepper ? (
+                        /* In-cart: stepper sits on its own row, full width */
+                        <View
+                            style={styles.stepperRow}
+                            onStartShouldSetResponder={() => true}
+                        >
                             <CartQuickAdjust
                                 quantity={cartQuantity}
-                                onIncrease={() => onUpdateQuantity(item.id, cartQuantity + 1)}
-                                onDecrease={() => onUpdateQuantity(item.id, cartQuantity - 1)}
-                                onRemove={() => onRemoveFromCart(item.id)}
+                                onIncrease={() => onUpdateQuantity!(item.id, cartQuantity + 1)}
+                                onDecrease={() => onUpdateQuantity!(item.id, cartQuantity - 1)}
+                                onRemove={() => onRemoveFromCart!(item.id)}
                                 maxQuantity={Math.min(item.stock, MAX_CART_QUANTITY_PER_ITEM)}
                                 disabled={item.stock === 0}
                                 colors={colors}
@@ -186,24 +204,23 @@ const ProductGridItem: React.FC<ProductGridItemProps> = memo(({
                             />
                         </View>
                     ) : (
+                        /* Not in cart: small circular "add" button aligned right */
                         <TouchableOpacity
                             style={[
-                                styles.cartButton,
+                                styles.addButton,
                                 {
-                                    backgroundColor: item.stock === 0 ? colors.buttonDisabled : colors.themePrimary,
+                                    backgroundColor: item.stock === 0
+                                        ? colors.buttonDisabled
+                                        : colors.themePrimary,
                                     opacity: item.stock === 0 ? 0.6 : 1,
-                                }
+                                },
                             ]}
-                            onPress={handleAddToCartPress}
-                            onPressIn={(e) => e.stopPropagation()}
+                            onPress={handleAddToCart}
+                            onPressIn={e => e.stopPropagation()}
                             disabled={item.stock === 0}
-                            activeOpacity={0.7}
+                            activeOpacity={0.75}
                         >
-                            <Icon
-                                name="cart-plus"
-                                size={16}
-                                color={colors.white}
-                            />
+                            <Icon name="cart-plus" size={14} color={colors.white} />
                         </TouchableOpacity>
                     )}
                 </View>
@@ -213,136 +230,152 @@ const ProductGridItem: React.FC<ProductGridItemProps> = memo(({
 });
 
 ProductGridItem.displayName = 'ProductGridItem';
-
 export default ProductGridItem;
 
-// ============================================================================
-// STYLES – classy, modern product cards
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
+// STYLES
+// ─────────────────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-    gridCard: {
+    // ── Card shell ────────────────────────────────────────────────────────────
+    card: {
         flex: 1,
-        borderRadius: 16,
+        borderRadius: 14,
         overflow: 'hidden',
-        marginBottom: 14,
-        marginHorizontal: 4,
+        marginBottom: 10,
+        marginHorizontal: 3,
         elevation: 2,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
+        shadowOpacity: 0.07,
+        shadowRadius: 6,
     },
-    gridImageContainer: {
+
+    // ── Image area ────────────────────────────────────────────────────────────
+    imageWrapper: {
         width: '100%',
-        height: 124,
+        height: 100,           // Reduced from 124 → more compact
         position: 'relative',
     },
-    gridImage: {
+    image: {
         width: '100%',
         height: '100%',
     },
-    gridImagePlaceholder: {
+    imagePlaceholder: {
         width: '100%',
         height: '100%',
         justifyContent: 'center',
         alignItems: 'center',
     },
+
+    // ── Overlaid badges ───────────────────────────────────────────────────────
     stockBadge: {
         position: 'absolute',
-        top: 8,
-        right: 8,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-        minWidth: 26,
+        top: 6,
+        right: 6,
+        paddingHorizontal: 6,
+        paddingVertical: 3,
+        borderRadius: 7,
+        minWidth: 22,
         alignItems: 'center',
     },
     stockBadgeText: {
-        fontSize: fonts.size.font10,
+        fontSize: fonts.size.font9,
         fontFamily: fonts.family.primaryBold,
     },
     wishlistBtn: {
         position: 'absolute',
-        top: 8,
-        left: 8,
+        top: 6,
+        left: 6,
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.92)',
+        elevation: 1,
+    },
+
+    // ── Card body ─────────────────────────────────────────────────────────────
+    body: {
+        padding: 8,             // Reduced from 12 → tighter / more modern
+        gap: 4,
+    },
+
+    // ── Category chip ─────────────────────────────────────────────────────────
+    categoryChip: {
+        paddingHorizontal: 6,
+        paddingVertical: 3,
+        borderRadius: 5,
+        alignSelf: 'flex-start',
+    },
+    categoryChipText: {
+        fontSize: fonts.size.font9,
+        fontFamily: fonts.family.primaryBold,
+        textTransform: 'uppercase',
+        letterSpacing: 0.3,
+    },
+
+    // ── Product name ──────────────────────────────────────────────────────────
+    productName: {
+        fontSize: fonts.size.font12,   // Reduced from 13
+        fontFamily: fonts.family.primaryBold,
+        minHeight: 30,
+        lineHeight: 16,
+    },
+
+    // ── Stock status label ────────────────────────────────────────────────────
+    stockLabel: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        paddingHorizontal: 6,
+        paddingVertical: 3,
+        borderRadius: 6,
+        gap: 3,
+    },
+    stockLabelText: {
+        fontSize: fonts.size.font9,
+        fontFamily: fonts.family.primaryBold,
+    },
+
+    // ── Footer ────────────────────────────────────────────────────────────────
+    /**
+     * Column layout so:
+     *  - Price always renders at the top
+     *  - The stepper renders below when in cart, using full card width
+     *  - This prevents the stepper from overflowing in narrow grid columns
+     */
+    footer: {
+        marginTop: 4,
+        flexDirection: 'column',
+        gap: 6,
+    },
+    /** Row containing the CartQuickAdjust, fills available width. */
+    stepperRow: {
+        width: '100%',
+        alignItems: 'center',
+    },
+
+    // ── Prices ────────────────────────────────────────────────────────────────
+    strikePrice: {
+        fontSize: fonts.size.font10,
+        fontFamily: fonts.family.secondaryRegular,
+        textDecorationLine: 'line-through',
+        marginBottom: 1,
+    },
+    price: {
+        fontSize: fonts.size.font13,   // Slightly smaller for compact grid
+        fontFamily: fonts.family.primaryBold,
+    },
+
+    // ── Add-to-cart button (default state) ────────────────────────────────────
+    addButton: {
         width: 30,
         height: 30,
         borderRadius: 15,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.92)',
-        elevation: 1,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 4,
-    },
-    gridContent: {
-        padding: 12,
-    },
-    categoryTag: {
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 6,
-        marginBottom: 6,
-        alignSelf: 'flex-start',
-    },
-    categoryTagText: {
-        fontSize: fonts.size.font9,
-        fontFamily: fonts.family.primaryBold,
-        textTransform: 'uppercase',
-        letterSpacing: 0.4,
-    },
-    gridProductName: {
-        fontSize: fonts.size.font13,
-        fontFamily: fonts.family.primaryBold,
-        marginBottom: 6,
-        minHeight: 36,
-        lineHeight: 18,
-    },
-    stockStatus: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        alignSelf: 'flex-start',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-        gap: 4,
-        marginBottom: 8,
-    },
-    stockStatusText: {
-        fontSize: fonts.size.font9,
-        fontFamily: fonts.family.primaryBold,
-    },
-    gridFooter: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-end',
-        gap: 8,
-    },
-    priceContainer: {
-        flex: 1,
-        justifyContent: 'flex-end',
-    },
-    actualPrice: {
-        fontSize: fonts.size.font11,
-        fontFamily: fonts.family.secondaryRegular,
-        textDecorationLine: 'line-through',
-        marginBottom: 2,
-    },
-    gridPrice: {
-        fontSize: fonts.size.font15,
-        fontFamily: fonts.family.primaryBold,
-    },
-    cartButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    quickAdjustWrap: {
-        flexDirection: 'row',
-        alignItems: 'center',
+        alignSelf: 'flex-end',   // Keep it right-aligned even in column layout
     },
 });

@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, Dimensions, FlatList, RefreshControl, TextInput } from 'react-native';
+import {
+    View, Text, StyleSheet, ScrollView, Image,
+    Dimensions, FlatList, RefreshControl, TextInput,
+} from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,7 +13,9 @@ import AppTouchableRipple from '../../components/AppTouchableRipple';
 import EmptyData, { EmptyDataType } from '../../components/EmptyData';
 import VoiceSearchButton from '../../components/VoiceSearchButton';
 import VoiceSearchOverlay from '../../popups/VoiceSearchOverlay';
-import { ProductGridItem } from '../../listItems';
+
+// ── Import BOTH item components so ProductsSection can switch between them ──
+import { ProductGridItem, ProductListItem } from '../../listItems';
 
 import { useTheme } from '../../contexts/ThemeProvider';
 import { useCart } from '../../contexts/CardContext';
@@ -25,9 +30,9 @@ import { ProductModel, ProductListModel } from '../../dataModels/models';
 
 import type { Product as ProductListProduct } from '../front/ProductListScreen';
 
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 // TYPES & INTERFACES
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface CategoryDetailScreenProps {
     categoryId: number;
@@ -49,10 +54,7 @@ export interface Product {
     unit_value?: number;
     image1: string;
     category_id?: number;
-    category?: {
-        id: number;
-        name: string;
-    };
+    category?: { id: number; name: string };
 }
 
 export interface CategoryDetail {
@@ -73,12 +75,15 @@ interface BenefitData {
     iconBgColor: string;
 }
 
-// ============================================================================
+type ViewMode = 'grid' | 'list';
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 
 const { width } = Dimensions.get('window');
 const HEADER_IMAGE_HEIGHT = 240;
+const GRID_COLUMNS = 2; // 2-column grid inside category detail
 
 const BENEFITS: BenefitData[] = [
     {
@@ -101,10 +106,11 @@ const BENEFITS: BenefitData[] = [
     },
 ];
 
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 // CUSTOM HOOKS
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 
+/** Fetches the category metadata (name, description, image, product count). */
 const useCategoryData = (categoryId: number | undefined, navigation: any) => {
     const [category, setCategory] = useState<CategoryDetail | null>(null);
     const [loading, setLoading] = useState(true);
@@ -112,7 +118,6 @@ const useCategoryData = (categoryId: number | undefined, navigation: any) => {
 
     const fetchCategoryDetail = useCallback(async () => {
         if (!categoryId) return;
-
         setLoading(true);
         try {
             const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
@@ -122,13 +127,9 @@ const useCategoryData = (categoryId: number | undefined, navigation: any) => {
                 showError: true,
             });
 
-            if (response?.success && response?.data) {
-                setCategory(response.data);
-            } else if (response?.data) {
-                setCategory(response.data);
-            } else {
-                navigation.goBack();
-            }
+            if (response?.success && response?.data) setCategory(response.data);
+            else if (response?.data) setCategory(response.data);
+            else navigation.goBack();
         } catch (error) {
             console.error('Fetch Category Detail Error:', error);
             navigation.goBack();
@@ -137,19 +138,16 @@ const useCategoryData = (categoryId: number | undefined, navigation: any) => {
         }
     }, [categoryId, navigation]);
 
-    useEffect(() => {
-        fetchCategoryDetail();
-    }, [fetchCategoryDetail]);
+    useEffect(() => { fetchCategoryDetail(); }, [fetchCategoryDetail]);
 
-    return {
-        category,
-        loading,
-        imageError,
-        setImageError,
-        refetch: fetchCategoryDetail,
-    };
+    return { category, loading, imageError, setImageError, refetch: fetchCategoryDetail };
 };
 
+/**
+ * Fetches the full product list and filters to only this category's products.
+ * Products are transformed to the `ProductListProduct` shape so they can be
+ * passed directly to `ProductGridItem` / `ProductListItem`.
+ */
 const useCategoryProducts = (categoryId: number | undefined) => {
     const [products, setProducts] = useState<ProductListProduct[]>([]);
     const [loading, setLoading] = useState(false);
@@ -158,11 +156,7 @@ const useCategoryProducts = (categoryId: number | undefined) => {
     const fetchProducts = useCallback(async (isRefresh = false) => {
         if (!categoryId) return;
 
-        if (isRefresh) {
-            setRefreshing(true);
-        } else {
-            setLoading(true);
-        }
+        isRefresh ? setRefreshing(true) : setLoading(true);
 
         try {
             const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
@@ -173,37 +167,33 @@ const useCategoryProducts = (categoryId: number | undefined) => {
             });
 
             if (response?.data && Array.isArray(response.data)) {
-                // Transform ProductModel to ProductListProduct format
-                const transformedProducts: ProductListProduct[] = response.data
+                const transformed: ProductListProduct[] = response.data
                     .filter((p: ProductModel) => p.category_id === categoryId)
-                    .map((p: ProductModel) => {
-                        const stock = parseFloat(p.available_units) || 0;
-                        return {
-                            id: p.id,
-                            category_id: p.category_id,
-                            name: p.name,
-                            description: p.description,
-                            price: p.price,
-                            actual_price: p.actual_price, // ★ ADDED for strike-through price display
-                            stock: stock,
-                            unit_type: p.unit_type,
-                            unit_value: p.unit_value,
-                            image1: p.image1,
-                            image2: p.image2,
-                            image3: p.image3,
-                            image4: p.image4,
-                            image5: p.image5,
-                            created_at: p.created_at,
-                            updated_at: p.updated_at,
-                            category: {
-                                id: p.category.id,
-                                name: p.category.name,
-                                description: p.category.description,
-                                image: p.category.image,
-                            },
-                        };
-                    });
-                setProducts(transformedProducts);
+                    .map((p: ProductModel) => ({
+                        id: p.id,
+                        category_id: p.category_id,
+                        name: p.name,
+                        description: p.description,
+                        price: p.price,
+                        actual_price: p.actual_price, // Needed for strike-through price
+                        stock: parseFloat(p.available_units) || 0,
+                        unit_type: p.unit_type,
+                        unit_value: p.unit_value,
+                        image1: p.image1,
+                        image2: p.image2,
+                        image3: p.image3,
+                        image4: p.image4,
+                        image5: p.image5,
+                        created_at: p.created_at,
+                        updated_at: p.updated_at,
+                        category: {
+                            id: p.category.id,
+                            name: p.category.name,
+                            description: p.category.description,
+                            image: p.category.image,
+                        },
+                    }));
+                setProducts(transformed);
             }
         } catch (error) {
             console.error('Fetch Category Products Error:', error);
@@ -213,18 +203,12 @@ const useCategoryProducts = (categoryId: number | undefined) => {
         }
     }, [categoryId]);
 
-    useEffect(() => {
-        fetchProducts();
-    }, [fetchProducts]);
+    useEffect(() => { fetchProducts(); }, [fetchProducts]);
 
-    return {
-        products,
-        loading,
-        refreshing,
-        refetch: () => fetchProducts(true),
-    };
+    return { products, loading, refreshing, refetch: () => fetchProducts(true) };
 };
 
+/** Filters the product list by a local text query (name / description / category). */
 const useProductSearch = (products: ProductListProduct[]) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredProducts, setFilteredProducts] = useState<ProductListProduct[]>(products);
@@ -232,28 +216,25 @@ const useProductSearch = (products: ProductListProduct[]) => {
     useEffect(() => {
         if (searchQuery.trim() === '') {
             setFilteredProducts(products);
-        } else {
-            const query = searchQuery.toLowerCase().trim();
-            const filtered = products.filter(
-                (product) =>
-                    product.name.toLowerCase().includes(query) ||
-                    product.description?.toLowerCase().includes(query) ||
-                    product.category?.name.toLowerCase().includes(query)
-            );
-            setFilteredProducts(filtered);
+            return;
         }
+        const query = searchQuery.toLowerCase().trim();
+        setFilteredProducts(
+            products.filter(
+                p =>
+                    p.name.toLowerCase().includes(query) ||
+                    p.description?.toLowerCase().includes(query) ||
+                    p.category?.name.toLowerCase().includes(query)
+            )
+        );
     }, [searchQuery, products]);
 
-    return {
-        searchQuery,
-        setSearchQuery,
-        filteredProducts,
-    };
+    return { searchQuery, setSearchQuery, filteredProducts };
 };
 
-// ============================================================================
-// HEADER IMAGE COMPONENT
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
+// HEADER IMAGE
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface HeaderImageProps {
     imageUrl: string;
@@ -264,11 +245,7 @@ interface HeaderImageProps {
 }
 
 const HeaderImage: React.FC<HeaderImageProps> = React.memo(({
-    imageUrl,
-    hasError,
-    productCount,
-    onError,
-    onBackPress,
+    imageUrl, hasError, productCount, onError, onBackPress,
 }) => {
     const colors = useTheme();
     const styles = useMemo(() => createHeaderStyles(colors), [colors]);
@@ -304,9 +281,9 @@ const HeaderImage: React.FC<HeaderImageProps> = React.memo(({
     );
 });
 
-// ============================================================================
-// STAT ITEM COMPONENT
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
+// STAT ITEM
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface StatItemProps {
     icon: string;
@@ -317,11 +294,7 @@ interface StatItemProps {
 }
 
 const StatItem: React.FC<StatItemProps> = React.memo(({
-    icon,
-    iconColor,
-    iconBgColor,
-    value,
-    label,
+    icon, iconColor, iconBgColor, value, label,
 }) => {
     const colors = useTheme();
     const styles = useMemo(() => createStatStyles(colors), [colors]);
@@ -337,9 +310,9 @@ const StatItem: React.FC<StatItemProps> = React.memo(({
     );
 });
 
-// ============================================================================
-// CATEGORY INFO CARD COMPONENT
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
+// CATEGORY INFO CARD
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface CategoryInfoCardProps {
     category: CategoryDetail;
@@ -353,9 +326,7 @@ interface CategoryInfoCardProps {
 }
 
 const CategoryInfoCard: React.FC<CategoryInfoCardProps> = React.memo(({
-    category,
-    stats,
-    onViewAll,
+    category, stats, onViewAll,
 }) => {
     const colors = useTheme();
     const styles = useMemo(() => createInfoCardStyles(colors), [colors]);
@@ -404,9 +375,9 @@ const CategoryInfoCard: React.FC<CategoryInfoCardProps> = React.memo(({
     );
 });
 
-// ============================================================================
-// SEARCH BAR COMPONENT
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
+// SEARCH BAR
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface SearchBarProps {
     searchQuery: string;
@@ -418,12 +389,7 @@ interface SearchBarProps {
 }
 
 const SearchBar: React.FC<SearchBarProps> = React.memo(({
-    searchQuery,
-    isListening,
-    isAvailable,
-    onSearch,
-    onVoicePress,
-    searchInputRef,
+    searchQuery, isListening, isAvailable, onSearch, onVoicePress, searchInputRef,
 }) => {
     const colors = useTheme();
     const styles = useMemo(() => createSearchStyles(colors), [colors]);
@@ -455,17 +421,17 @@ const SearchBar: React.FC<SearchBarProps> = React.memo(({
     );
 });
 
-// ============================================================================
-// PRODUCTS SECTION COMPONENT
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
+// PRODUCTS SECTION
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface ProductsSectionProps {
     products: ProductListProduct[];
     filteredProducts: ProductListProduct[];
     searchQuery: string;
     loading: boolean;
-    viewMode: 'grid' | 'list';
-    onViewModeChange: (mode: 'grid' | 'list') => void;
+    viewMode: ViewMode;
+    onViewModeChange: (mode: ViewMode) => void;
     onProductPress: (product: ProductListProduct | number) => void;
     onAddToCart: (product: ProductListProduct) => void;
     onUpdateQuantity: (productId: number, quantity: number) => void;
@@ -495,33 +461,71 @@ const ProductsSection: React.FC<ProductsSectionProps> = React.memo(({
     const colors = useTheme();
     const styles = useMemo(() => createProductsStyles(colors), [colors]);
 
-    const renderProduct = useCallback(({ item }: { item: ProductListProduct }) => (
-        <ProductGridItem
-            item={item}
-            onPress={onProductPress}
-            onAddToCart={onAddToCart}
-            isInCart={isInCart(item.id)}
-            cartQuantity={getCartQuantity(item.id)}
-            onUpdateQuantity={onUpdateQuantity}
-            onRemoveFromCart={onRemoveFromCart}
-            colors={colors}
-            onToggleFavorite={onToggleFavorite}
-            isFavorite={isInWishlist(item.id)}
-        />
-    ), [onProductPress, onAddToCart, onUpdateQuantity, onRemoveFromCart, getCartQuantity, isInCart, colors, onToggleFavorite, isInWishlist]);
+    /**
+     * Shared props for both grid and list item renderers.
+     * Extracted once here so the render callbacks stay lean.
+     */
+    const sharedItemProps = useCallback(
+        (item: ProductListProduct) => ({
+            item,
+            onPress: onProductPress,
+            onAddToCart,
+            isInCart: isInCart(item.id),
+            cartQuantity: getCartQuantity(item.id),
+            onUpdateQuantity,
+            onRemoveFromCart,
+            colors,
+            onToggleFavorite,
+            isFavorite: isInWishlist(item.id),
+        }),
+        [
+            onProductPress, onAddToCart, onUpdateQuantity, onRemoveFromCart,
+            getCartQuantity, isInCart, colors, onToggleFavorite, isInWishlist,
+        ]
+    );
+
+    /**
+     * Grid renderer – uses ProductGridItem (compact card with column layout footer).
+     * numColumns={GRID_COLUMNS} is set on the FlatList below.
+     */
+    const renderGridItem = useCallback(
+        ({ item }: { item: ProductListProduct }) => (
+            <ProductGridItem {...sharedItemProps(item)} />
+        ),
+        [sharedItemProps]
+    );
+
+    /**
+     * List renderer – uses ProductListItem (horizontal card with stepper on its own row).
+     * numColumns={1} is set on the FlatList below.
+     */
+    const renderListItem = useCallback(
+        ({ item }: { item: ProductListProduct }) => (
+            <ProductListItem {...sharedItemProps(item)} />
+        ),
+        [sharedItemProps]
+    );
+
+    const keyExtractor = useCallback((item: ProductListProduct) => item.id.toString(), []);
 
     return (
         <View style={styles.container}>
+
+            {/* Section header: title + view-mode toggle */}
             <View style={styles.header}>
                 <Text style={styles.title}>
                     {searchQuery.trim()
                         ? `Search Results (${filteredProducts.length})`
-                        : `All Products (${products.length})`
-                    }
+                        : `All Products (${products.length})`}
                 </Text>
+
                 <View style={styles.viewModeContainer}>
+                    {/* Grid toggle */}
                     <AppTouchableRipple
-                        style={[styles.viewModeButton, viewMode === 'grid' && styles.viewModeActive] as any}
+                        style={[
+                            styles.viewModeButton,
+                            viewMode === 'grid' && styles.viewModeActive,
+                        ] as any}
                         onPress={() => onViewModeChange('grid')}
                     >
                         <Icon
@@ -530,8 +534,13 @@ const ProductsSection: React.FC<ProductsSectionProps> = React.memo(({
                             color={viewMode === 'grid' ? colors.white : colors.textLabel}
                         />
                     </AppTouchableRipple>
+
+                    {/* List toggle */}
                     <AppTouchableRipple
-                        style={[styles.viewModeButton, viewMode === 'list' && styles.viewModeActive] as any}
+                        style={[
+                            styles.viewModeButton,
+                            viewMode === 'list' && styles.viewModeActive,
+                        ] as any}
                         onPress={() => onViewModeChange('list')}
                     >
                         <Icon
@@ -543,6 +552,7 @@ const ProductsSection: React.FC<ProductsSectionProps> = React.memo(({
                 </View>
             </View>
 
+            {/* Content area */}
             {loading && products.length === 0 ? (
                 <View style={styles.loadingContainer}>
                     <Text style={styles.loadingText}>Loading products...</Text>
@@ -553,18 +563,33 @@ const ProductsSection: React.FC<ProductsSectionProps> = React.memo(({
                     message={
                         searchQuery.trim()
                             ? `No products found matching "${searchQuery}"`
-                            : "No products found in this category"
+                            : 'No products found in this category'
                     }
                 />
             ) : (
+                /*
+                 * KEY CHANGE:
+                 * The FlatList now switches BOTH the render function AND the column
+                 * count based on viewMode.
+                 *
+                 * Grid → ProductGridItem with GRID_COLUMNS columns
+                 *         (compact card, price+stepper stacked vertically inside card)
+                 *
+                 * List → ProductListItem with 1 column
+                 *         (full-width row card, stepper rendered on its own second row)
+                 *
+                 * The `key` prop forces FlatList to fully remount when viewMode changes,
+                 * which is required because numColumns cannot change on a live FlatList.
+                 */
                 <FlatList
                     data={filteredProducts}
-                    key={viewMode}
-                    numColumns={viewMode === 'grid' ? 2 : 1}
-                    keyExtractor={(item) => item.id.toString()}
-                    scrollEnabled={false}
+                    key={viewMode}                                          // Forces remount on mode change
+                    numColumns={viewMode === 'grid' ? GRID_COLUMNS : 1}
+                    renderItem={viewMode === 'grid' ? renderGridItem : renderListItem}
+                    keyExtractor={keyExtractor}
+                    scrollEnabled={false}                                   // Parent ScrollView handles scrolling
                     contentContainerStyle={styles.list}
-                    renderItem={renderProduct}
+                    columnWrapperStyle={viewMode === 'grid' ? styles.gridRow : undefined}
                     removeClippedSubviews
                     maxToRenderPerBatch={10}
                     windowSize={5}
@@ -574,15 +599,29 @@ const ProductsSection: React.FC<ProductsSectionProps> = React.memo(({
     );
 });
 
-// ============================================================================
-// BENEFIT ITEM COMPONENT
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
+// STATIC SECTIONS
+// ─────────────────────────────────────────────────────────────────────────────
 
-interface BenefitItemProps {
-    benefit: BenefitData;
-}
+const AboutSection: React.FC = React.memo(() => {
+    const colors = useTheme();
+    const styles = useMemo(() => createAboutStyles(colors), [colors]);
 
-const BenefitItem: React.FC<BenefitItemProps> = React.memo(({ benefit }) => {
+    return (
+        <View style={styles.container}>
+            <Icon name="information" size={24} color={colors.themePrimary} />
+            <View style={styles.content}>
+                <Text style={styles.title}>About This Category</Text>
+                <Text style={styles.text}>
+                    All products in this category are organic, fresh, and sourced directly from local farms.
+                    We ensure the highest quality standards for your health and wellbeing.
+                </Text>
+            </View>
+        </View>
+    );
+});
+
+const BenefitItem: React.FC<{ benefit: BenefitData }> = React.memo(({ benefit }) => {
     const colors = useTheme();
     const styles = useMemo(() => createBenefitStyles(colors), [colors]);
 
@@ -599,25 +638,43 @@ const BenefitItem: React.FC<BenefitItemProps> = React.memo(({ benefit }) => {
     );
 });
 
-// ============================================================================
-// MAIN COMPONENT
-// ============================================================================
+const BenefitsSection: React.FC = React.memo(() => {
+    const colors = useTheme();
+    const styles = useMemo(() => createBenefitsStyles(colors), [colors]);
 
-const CategoryDetailScreen: React.FC<CategoryDetailScreenNavigationProps> = ({ navigation, route }) => {
+    return (
+        <View style={styles.container}>
+            <Text style={styles.title}>Why Choose Organic?</Text>
+            {BENEFITS.map((benefit, index) => (
+                <BenefitItem key={index} benefit={benefit} />
+            ))}
+        </View>
+    );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN SCREEN
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CategoryDetailScreen: React.FC<CategoryDetailScreenNavigationProps> = ({
+    navigation, route,
+}) => {
     const colors = useTheme();
     const insets = useSafeAreaInsets();
     const searchInputRef = useRef<TextInput>(null);
 
     const categoryId = route.params?.params?.categoryId;
 
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+    const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
     const { addToCart, isInCart, getCartItem, updateQuantity, removeFromCart } = useCart();
     const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
 
-    // Custom hooks
-    const { category, loading, imageError, setImageError, refetch: refetchCategory } = useCategoryData(categoryId, navigation);
-    const { products, loading: productsLoading, refreshing, refetch: refetchProducts } = useCategoryProducts(categoryId);
+    // Data hooks
+    const { category, loading, imageError, setImageError, refetch: refetchCategory } =
+        useCategoryData(categoryId, navigation);
+    const { products, loading: productsLoading, refreshing, refetch: refetchProducts } =
+        useCategoryProducts(categoryId);
     const { searchQuery, setSearchQuery, filteredProducts } = useProductSearch(products);
 
     // Voice search
@@ -632,15 +689,14 @@ const CategoryDetailScreen: React.FC<CategoryDetailScreenNavigationProps> = ({ n
         language: 'en-US',
     });
 
+    // Stop voice search when leaving the screen
     useFocusEffect(
         useCallback(() => {
-            return () => {
-                if (isListening) stopListening();
-            };
+            return () => { if (isListening) stopListening(); };
         }, [isListening, stopListening])
     );
 
-    // Early return validation
+    // Guard: categoryId must be present
     useEffect(() => {
         if (!categoryId) {
             console.error('CategoryDetailScreen: categoryId is missing');
@@ -650,31 +706,32 @@ const CategoryDetailScreen: React.FC<CategoryDetailScreenNavigationProps> = ({ n
 
     if (!categoryId) return null;
 
-    // Computed values
+    // ── Computed stats ─────────────────────────────────────────────────────────
+
     const stats = useMemo(() => {
-        const totalProducts = products.length > 0 ? products.length : category?.product_count || 0;
+        const totalProducts = products.length > 0
+            ? products.length
+            : category?.product_count || 0;
+
         const inStockCount = products.filter(p => p.stock > 0).length;
 
         const prices = products
             .filter(p => p.price && !isNaN(parseFloat(p.price)))
             .map(p => parseFloat(p.price));
+
         const avgPrice = prices.length > 0
             ? prices.reduce((a, b) => a + b, 0) / prices.length
             : 0;
 
         const formattedAvgPrice = avgPrice < 1000
             ? avgPrice.toFixed(0)
-            : (avgPrice / 1000).toFixed(1) + 'k';
+            : `${(avgPrice / 1000).toFixed(1)}k`;
 
-        return {
-            totalProducts,
-            inStockCount,
-            avgPrice: formattedAvgPrice,
-            hasProducts: products.length > 0,
-        };
+        return { totalProducts, inStockCount, avgPrice: formattedAvgPrice, hasProducts: products.length > 0 };
     }, [products, category]);
 
-    // Event handlers
+    // ── Event handlers ─────────────────────────────────────────────────────────
+
     const handleRefresh = useCallback(() => {
         refetchCategory();
         refetchProducts();
@@ -694,7 +751,6 @@ const CategoryDetailScreen: React.FC<CategoryDetailScreenNavigationProps> = ({ n
 
     const handleAddToCart = useCallback((product: ProductListProduct) => {
         if (product.stock === 0) return;
-
         addToCart({
             id: product.id,
             name: product.name,
@@ -729,19 +785,20 @@ const CategoryDetailScreen: React.FC<CategoryDetailScreenNavigationProps> = ({ n
         if (isListening) {
             await stopListening();
         } else {
-            try {
-                await startListening();
-            } catch (error) {
-                console.error('Error starting voice search:', error);
-            }
+            try { await startListening(); }
+            catch (error) { console.error('Error starting voice search:', error); }
         }
     }, [isListening, startListening, stopListening]);
 
+    // ── Styles ─────────────────────────────────────────────────────────────────
+
     const styles = useMemo(() => createMainStyles(colors), [colors]);
-    const scrollContentStyle = useMemo(() => ({
-        ...styles.scrollContent,
-        paddingBottom: 32 + insets.bottom
-    }), [styles.scrollContent, insets.bottom]);
+    const scrollContentStyle = useMemo(
+        () => ({ ...styles.scrollContent, paddingBottom: 32 + insets.bottom }),
+        [styles.scrollContent, insets.bottom]
+    );
+
+    // ── Loading state ──────────────────────────────────────────────────────────
 
     if (loading || !category) {
         return (
@@ -755,6 +812,8 @@ const CategoryDetailScreen: React.FC<CategoryDetailScreenNavigationProps> = ({ n
             </MainContainer>
         );
     }
+
+    // ── Render ─────────────────────────────────────────────────────────────────
 
     return (
         <MainContainer
@@ -799,6 +858,7 @@ const CategoryDetailScreen: React.FC<CategoryDetailScreenNavigationProps> = ({ n
                         searchInputRef={searchInputRef}
                     />
 
+                    {/* Products section handles both grid and list view */}
                     <ProductsSection
                         products={products}
                         filteredProducts={filteredProducts}
@@ -817,7 +877,6 @@ const CategoryDetailScreen: React.FC<CategoryDetailScreenNavigationProps> = ({ n
                     />
 
                     <AboutSection />
-
                     <BenefitsSection />
                 </ScrollView>
             </View>
@@ -833,331 +892,127 @@ const CategoryDetailScreen: React.FC<CategoryDetailScreenNavigationProps> = ({ n
     );
 };
 
-// ============================================================================
-// STATIC SECTIONS
-// ============================================================================
-
-const AboutSection: React.FC = React.memo(() => {
-    const colors = useTheme();
-    const styles = useMemo(() => createAboutStyles(colors), [colors]);
-
-    return (
-        <View style={styles.container}>
-            <Icon name="information" size={24} color={colors.themePrimary} />
-            <View style={styles.content}>
-                <Text style={styles.title}>About This Category</Text>
-                <Text style={styles.text}>
-                    All products in this category are organic, fresh, and sourced directly from local farms.
-                    We ensure the highest quality standards for your health and wellbeing.
-                </Text>
-            </View>
-        </View>
-    );
-});
-
-const BenefitsSection: React.FC = React.memo(() => {
-    const colors = useTheme();
-    const styles = useMemo(() => createBenefitsStyles(colors), [colors]);
-
-    return (
-        <View style={styles.container}>
-            <Text style={styles.title}>Why Choose Organic?</Text>
-            {BENEFITS.map((benefit, index) => (
-                <BenefitItem key={index} benefit={benefit} />
-            ))}
-        </View>
-    );
-});
-
 export default CategoryDetailScreen;
 
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 // STYLES
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 
-const createMainStyles = (colors: any) => StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: colors.backgroundPrimary,
-    },
-    scrollView: {
-        flex: 1,
-    },
-    scrollContent: {
-        paddingBottom: 32,
-    },
-});
+const createMainStyles = (colors: any) =>
+    StyleSheet.create({
+        container: { flex: 1, backgroundColor: colors.backgroundPrimary },
+        scrollView: { flex: 1 },
+        scrollContent: { paddingBottom: 32 },
+    });
 
-const createHeaderStyles = (colors: any) => StyleSheet.create({
-    container: {
-        width: '100%',
-        height: HEADER_IMAGE_HEIGHT,
-        position: 'relative',
-    },
-    image: {
-        width: '100%',
-        height: '100%',
-    },
-    placeholder: {
-        width: '100%',
-        height: '100%',
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: colors.themePrimaryLight,
-    },
-    gradient: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: 80,
-        backgroundColor: 'rgba(0,0,0,0.3)',
-    },
-    backButton: {
-        position: 'absolute',
-        top: 50,
-        left: 20,
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: 'rgba(0,0,0,0.5)',
-    },
-    badge: {
-        position: 'absolute',
-        bottom: 16,
-        right: 16,
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 20,
-        gap: 6,
-        backgroundColor: colors.themePrimary,
-    },
-    badgeText: {
-        color: '#FFFFFF',
-        fontSize: fonts.size.font13,
-        fontFamily: fonts.family.primaryBold,
-    },
-});
+const createHeaderStyles = (colors: any) =>
+    StyleSheet.create({
+        container: { width: '100%', height: HEADER_IMAGE_HEIGHT, position: 'relative' },
+        image: { width: '100%', height: '100%' },
+        placeholder: {
+            width: '100%', height: '100%',
+            justifyContent: 'center', alignItems: 'center',
+            backgroundColor: colors.themePrimaryLight,
+        },
+        gradient: {
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            height: 80, backgroundColor: 'rgba(0,0,0,0.3)',
+        },
+        backButton: {
+            position: 'absolute', top: 50, left: 20,
+            width: 40, height: 40, borderRadius: 20,
+            justifyContent: 'center', alignItems: 'center',
+            backgroundColor: 'rgba(0,0,0,0.5)',
+        },
+        badge: {
+            position: 'absolute', bottom: 16, right: 16,
+            flexDirection: 'row', alignItems: 'center',
+            paddingHorizontal: 12, paddingVertical: 8,
+            borderRadius: 20, gap: 6,
+            backgroundColor: colors.themePrimary,
+        },
+        badgeText: { color: '#FFFFFF', fontSize: fonts.size.font13, fontFamily: fonts.family.primaryBold },
+    });
 
-const createInfoCardStyles = (colors: any) => StyleSheet.create({
-    card: {
-        marginTop: -20,
-        marginHorizontal: 16,
-        borderRadius: 20,
-        padding: 20,
-        backgroundColor: colors.backgroundPrimary,
-        elevation: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-    },
-    name: {
-        fontSize: fonts.size.font26,
-        fontFamily: fonts.family.primaryBold,
-        color: colors.textPrimary,
-        marginBottom: 8,
-    },
-    description: {
-        fontSize: fonts.size.font15,
-        fontFamily: fonts.family.secondaryRegular,
-        color: colors.textDescription,
-        lineHeight: 22,
-        marginBottom: 20,
-    },
-    statsContainer: {
-        flexDirection: 'row',
-        gap: 12,
-        marginBottom: 20,
-    },
-    viewAllButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 14,
-        borderRadius: 12,
-        gap: 8,
-        backgroundColor: colors.themePrimary,
-    },
-    viewAllButtonText: {
-        fontSize: fonts.size.font16,
-        fontFamily: fonts.family.primaryBold,
-        color: colors.white,
-    },
-});
+const createInfoCardStyles = (colors: any) =>
+    StyleSheet.create({
+        card: {
+            marginTop: -20, marginHorizontal: 16,
+            borderRadius: 20, padding: 20,
+            backgroundColor: colors.backgroundPrimary,
+            elevation: 4,
+            shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.15, shadowRadius: 8,
+        },
+        name: { fontSize: fonts.size.font26, fontFamily: fonts.family.primaryBold, color: colors.textPrimary, marginBottom: 8 },
+        description: { fontSize: fonts.size.font15, fontFamily: fonts.family.secondaryRegular, color: colors.textDescription, lineHeight: 22, marginBottom: 20 },
+        statsContainer: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+        viewAllButton: {
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+            paddingVertical: 14, borderRadius: 12, gap: 8,
+            backgroundColor: colors.themePrimary,
+        },
+        viewAllButtonText: { fontSize: fonts.size.font16, fontFamily: fonts.family.primaryBold, color: colors.white },
+    });
 
-const createStatStyles = (colors: any) => StyleSheet.create({
-    container: {
-        flex: 1,
-        borderRadius: 12,
-        padding: 16,
-        alignItems: 'center',
-        gap: 8,
-        backgroundColor: colors.backgroundSecondary,
-    },
-    iconContainer: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 4,
-    },
-    value: {
-        fontSize: fonts.size.font20,
-        fontFamily: fonts.family.primaryBold,
-        color: colors.textPrimary,
-        marginTop: 8,
-    },
-    label: {
-        fontSize: fonts.size.font12,
-        fontFamily: fonts.family.secondaryRegular,
-        color: colors.textLabel,
-        marginTop: 4,
-    },
-});
+const createStatStyles = (colors: any) =>
+    StyleSheet.create({
+        container: { flex: 1, borderRadius: 12, padding: 16, alignItems: 'center', gap: 8, backgroundColor: colors.backgroundSecondary },
+        iconContainer: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
+        value: { fontSize: fonts.size.font20, fontFamily: fonts.family.primaryBold, color: colors.textPrimary, marginTop: 8 },
+        label: { fontSize: fonts.size.font12, fontFamily: fonts.family.secondaryRegular, color: colors.textLabel, marginTop: 4 },
+    });
 
-const createSearchStyles = (colors: any) => StyleSheet.create({
-    container: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 5,
-        gap: 12,
-        borderWidth: 1,
-        borderColor: colors.themePrimary,
-        backgroundColor: 'rgba(112, 209, 152, 0.2)',
-        marginTop: 10,
-        marginHorizontal: 10,
-    },
-    input: {
-        flex: 1,
-        fontSize: fonts.size.font15,
-        fontFamily: fonts.family.primaryRegular,
-        color: colors.textPrimary,
-    },
-});
+const createSearchStyles = (colors: any) =>
+    StyleSheet.create({
+        container: {
+            flexDirection: 'row', alignItems: 'center',
+            borderRadius: 12, paddingHorizontal: 16, paddingVertical: 5,
+            gap: 12, borderWidth: 1, borderColor: colors.themePrimary,
+            backgroundColor: 'rgba(112, 209, 152, 0.2)',
+            marginTop: 10, marginHorizontal: 10,
+        },
+        input: { flex: 1, fontSize: fonts.size.font15, fontFamily: fonts.family.primaryRegular, color: colors.textPrimary },
+    });
 
-const createProductsStyles = (colors: any) => StyleSheet.create({
-    container: {
-        marginTop: 24,
-        paddingHorizontal: 16,
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    title: {
-        fontSize: fonts.size.font20,
-        fontFamily: fonts.family.primaryBold,
-        color: colors.textPrimary,
-    },
-    viewModeContainer: {
-        flexDirection: 'row',
-        gap: 8,
-        alignItems: 'center',
-    },
-    viewModeButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 8,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: 'transparent',
-    },
-    viewModeActive: {
-        backgroundColor: colors.themePrimary,
-    },
-    loadingContainer: {
-        padding: 40,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    loadingText: {
-        fontSize: fonts.size.font14,
-        fontFamily: fonts.family.secondaryRegular,
-        color: colors.textLabel,
-    },
-    list: {
-        gap: 12,
-    },
-});
+const createProductsStyles = (colors: any) =>
+    StyleSheet.create({
+        container: { marginTop: 24, paddingHorizontal: 16 },
+        header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+        title: { fontSize: fonts.size.font20, fontFamily: fonts.family.primaryBold, color: colors.textPrimary },
+        viewModeContainer: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+        viewModeButton: {
+            width: 36, height: 36, borderRadius: 8,
+            justifyContent: 'center', alignItems: 'center',
+            backgroundColor: 'transparent',
+        },
+        viewModeActive: { backgroundColor: colors.themePrimary },
+        loadingContainer: { padding: 40, alignItems: 'center', justifyContent: 'center' },
+        loadingText: { fontSize: fonts.size.font14, fontFamily: fonts.family.secondaryRegular, color: colors.textLabel },
+        list: { gap: 12 },
+        /** Adds consistent gap between grid columns. */
+        gridRow: { gap: 8, justifyContent: 'space-between' },
+    });
 
-const createAboutStyles = (colors: any) => StyleSheet.create({
-    container: {
-        marginHorizontal: 16,
-        marginTop: 24,
-        borderRadius: 16,
-        padding: 20,
-        flexDirection: 'row',
-        gap: 16,
-        backgroundColor: colors.backgroundSecondary,
-    },
-    content: {
-        flex: 1,
-    },
-    title: {
-        fontSize: fonts.size.font16,
-        fontFamily: fonts.family.primaryBold,
-        color: colors.textPrimary,
-        marginBottom: 8,
-    },
-    text: {
-        fontSize: fonts.size.font14,
-        fontFamily: fonts.family.secondaryRegular,
-        color: colors.textDescription,
-        lineHeight: 20,
-    },
-});
+const createAboutStyles = (colors: any) =>
+    StyleSheet.create({
+        container: { marginHorizontal: 16, marginTop: 24, borderRadius: 16, padding: 20, flexDirection: 'row', gap: 16, backgroundColor: colors.backgroundSecondary },
+        content: { flex: 1 },
+        title: { fontSize: fonts.size.font16, fontFamily: fonts.family.primaryBold, color: colors.textPrimary, marginBottom: 8 },
+        text: { fontSize: fonts.size.font14, fontFamily: fonts.family.secondaryRegular, color: colors.textDescription, lineHeight: 20 },
+    });
 
-const createBenefitsStyles = (colors: any) => StyleSheet.create({
-    container: {
-        marginHorizontal: 16,
-        marginTop: 24,
-    },
-    title: {
-        fontSize: fonts.size.font20,
-        fontFamily: fonts.family.primaryBold,
-        color: colors.textPrimary,
-    },
-});
+const createBenefitsStyles = (colors: any) =>
+    StyleSheet.create({
+        container: { marginHorizontal: 16, marginTop: 24 },
+        title: { fontSize: fonts.size.font20, fontFamily: fonts.family.primaryBold, color: colors.textPrimary },
+    });
 
-const createBenefitStyles = (colors: any) => StyleSheet.create({
-    container: {
-        flexDirection: 'row',
-        borderRadius: 16,
-        padding: 16,
-        marginTop: 12,
-        gap: 16,
-        backgroundColor: colors.backgroundSecondary,
-    },
-    iconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    content: {
-        flex: 1,
-    },
-    title: {
-        fontSize: fonts.size.font15,
-        fontFamily: fonts.family.primaryBold,
-        color: colors.textPrimary,
-        marginBottom: 4,
-    },
-    description: {
-        fontSize: fonts.size.font13,
-        fontFamily: fonts.family.secondaryRegular,
-        color: colors.textDescription,
-        lineHeight: 18,
-    },
-});
+const createBenefitStyles = (colors: any) =>
+    StyleSheet.create({
+        container: { flexDirection: 'row', borderRadius: 16, padding: 16, marginTop: 12, gap: 16, backgroundColor: colors.backgroundSecondary },
+        iconContainer: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+        content: { flex: 1 },
+        title: { fontSize: fonts.size.font15, fontFamily: fonts.family.primaryBold, color: colors.textPrimary, marginBottom: 4 },
+        description: { fontSize: fonts.size.font13, fontFamily: fonts.family.secondaryRegular, color: colors.textDescription, lineHeight: 18 },
+    });
