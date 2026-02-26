@@ -8,6 +8,7 @@ import { useTheme } from '../../contexts/ThemeProvider';
 import { useCart } from '../../contexts/CardContext';
 import { useAddress, Address } from '../../contexts/AddressContext';
 import AppTouchableRipple from '../../components/AppTouchableRipple';
+import SuccessCheckOverlay from '../../components/SuccessCheckOverlay';
 import ApiManager from '../../managers/ApiManager';
 import StorageManager from '../../managers/StorageManager';
 import fonts from '../../styles/fonts';
@@ -455,6 +456,11 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) => {
     // ============================================================================
     const [loading, setLoading] = useState<boolean>(false);
     const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
+    const [successOverlay, setSuccessOverlay] = useState<{
+        orderCode: string;
+        deliveryDate: string;
+        orderId?: number;
+    } | null>(null);
 
     // ============================================================================
     // COMPUTED VALUES
@@ -549,7 +555,7 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) => {
                                 },
                                 token: token || undefined,
                                 showError: true,
-                                showSuccess: true,
+                                // showSuccess: true,
                             });
 
                             console.log('handlePlaceOrder response', response);
@@ -591,28 +597,11 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) => {
                                     }
                                 }
 
-                                Alert.alert(
-                                    'Order Placed Successfully!',
-                                    `Your order ${orderCode} has been placed and will be delivered on ${orderResponse.data.delivery_date}.`,
-                                    [
-                                        {
-                                            text: 'OK',
-                                            onPress: () => {
-                                                if (orderId) {
-                                                    // Navigate directly to the order detail screen
-                                                    navigation.navigate(constant.routeName.orderDetail, {
-                                                        orderId: orderId,
-                                                    });
-                                                } else {
-                                                    // Fallback: navigate to orders list
-                                                    navigation.navigate(constant.routeName.mainTabs, {
-                                                        screen: constant.routeName.orders,
-                                                    });
-                                                }
-                                            },
-                                        },
-                                    ]
-                                );
+                                setSuccessOverlay({
+                                    orderCode,
+                                    deliveryDate: orderResponse.data.delivery_date,
+                                    orderId,
+                                });
                             } else {
                                 console.error('❌ Invalid order response structure:', orderResponse);
                                 Alert.alert('Error', 'Failed to place order. Please try again.');
@@ -631,6 +620,18 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) => {
             ]
         );
     }, [selectedAddressId, cartItems.length, total, selectedAddressData, clearCart, navigation]);
+
+    const handleSuccessOk = useCallback(() => {
+        const data = successOverlay;
+        setSuccessOverlay(null);
+        if (data?.orderId) {
+            // Replace checkout with order detail so back does not return to checkout
+            navigation.replace(constant.routeName.orderDetail, { orderId: data.orderId });
+        } else {
+            // Replace checkout with orders list so back does not return to checkout
+            navigation.replace(constant.routeName.orders);
+        }
+    }, [successOverlay, navigation]);
 
     // ============================================================================
     // RENDER
@@ -683,6 +684,11 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) => {
                     disabled={isPlaceOrderDisabled}
                     onPlaceOrder={handlePlaceOrder}
                 />
+
+                {/* Full-screen Lottie success overlay; onFinish navigates away */}
+                {successOverlay && (
+                    <SuccessCheckOverlay onFinish={handleSuccessOk} />
+                )}
             </View>
         </MainContainer>
     );
