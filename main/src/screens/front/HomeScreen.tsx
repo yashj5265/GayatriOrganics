@@ -3,6 +3,7 @@ import {
     View, Text, StyleSheet, ScrollView, FlatList, Alert,
     TouchableOpacity, Image, ActivityIndicator, Linking,
 } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -56,6 +57,11 @@ interface CarouselItem {
 
 // Map of categoryId → products (only in-stock)
 type CategoryProductMap = Record<number, ProductListProduct[]>;
+
+type ProductsQueryResult = {
+    featured: ProductListProduct[];
+    categoryProducts: CategoryProductMap;
+};
 
 const CATEGORY_COLORS = ['#4caf50', '#ff9800', '#795548', '#2196f3', '#9c27b0', '#f44336'];
 
@@ -768,13 +774,128 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
     const [userName, setUserName] = useState<string>('Guest');
     const [showAddressModal, setShowAddressModal] = useState(false);
-    const [categories, setCategories] = useState<CategoryModel[]>([]);
-    const [featuredProducts, setFeaturedProducts] = useState<ProductListProduct[]>([]);
-    const [categoryProducts, setCategoryProducts] = useState<CategoryProductMap>({});
-    const [carousels, setCarousels] = useState<Banner[]>([]);
-    const [categoriesLoading, setCategoriesLoading] = useState(false);
-    const [productsLoading, setProductsLoading] = useState(false);
-    const [carouselsLoading, setCarouselsLoading] = useState(false);
+    const {
+        data: categories = [],
+        isLoading: categoriesLoading,
+        refetch: refetchCategories,
+    } = useQuery<CategoryModel[]>({
+        queryKey: ['categories'],
+        queryFn: async () => {
+            try {
+                const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
+                const response = await ApiManager.get<CategoryListModel>({
+                    endpoint: constant.apiEndPoints.allCategories,
+                    token: token || undefined,
+                    showError: false,
+                });
+                const data: CategoryModel[] =
+                    response?.data && Array.isArray(response.data) ? response.data : [];
+                const length = data.length;
+                console.log('length', length);
+                return data.slice(0, length);
+            } catch (error) {
+                console.error('Error fetching categories:', error);
+                return [];
+            }
+        },
+    });
+
+    const {
+        data: productsData,
+        isLoading: productsLoading,
+        refetch: refetchProducts,
+    } = useQuery<ProductsQueryResult>({
+        queryKey: ['products'],
+        queryFn: async () => {
+            try {
+                const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
+                const response = await ApiManager.get<ProductListModel>({
+                    endpoint: constant.apiEndPoints.allProducts,
+                    token: token || undefined,
+                    showError: false,
+                });
+
+                const raw: ProductModel[] =
+                    response?.data && Array.isArray(response.data) ? response.data : [];
+
+                const transformed: ProductListProduct[] = raw.map(p => ({
+                    id: p.id,
+                    category_id: p.category_id,
+                    name: p.name,
+                    description: p.description,
+                    price: p.price,
+                    actual_price: p.actual_price,
+                    stock: parseFloat(p.available_units) || 0,
+                    unit_type: p.unit_type,
+                    unit_value: p.unit_value,
+                    image1: p.image1,
+                    image2: p.image2,
+                    image3: p.image3,
+                    image4: p.image4,
+                    image5: p.image5,
+                    created_at: p.created_at,
+                    updated_at: p.updated_at,
+                    category: {
+                        id: p.category.id,
+                        name: p.category.name,
+                        description: p.category.description,
+                        image: p.category.image,
+                    },
+                }));
+
+                const inStock = transformed.filter(p => p.stock > 0);
+
+                return {
+                    featured: inStock.slice(0, MAX_FEATURED_PRODUCTS),
+                    categoryProducts: groupProductsByCategory(inStock),
+                };
+            } catch (error) {
+                console.error('Error fetching featured products:', error);
+                return { featured: [], categoryProducts: {} };
+            }
+        },
+    });
+
+    const featuredProducts = productsData?.featured ?? [];
+    const categoryProducts = productsData?.categoryProducts ?? {};
+
+    const {
+        data: carousels = [],
+        isLoading: carouselsLoading,
+        refetch: refetchCarousels,
+    } = useQuery<Banner[]>({
+        queryKey: ['carousels'],
+        queryFn: async () => {
+            try {
+                const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
+                const response = await ApiManager.get<CarouselItem[]>({
+                    endpoint: '/api/carousels',
+                    token: token || undefined,
+                    showError: false,
+                });
+                const raw: CarouselItem[] =
+                    response?.data && Array.isArray(response.data) ? response.data : [];
+                const mapped: Banner[] = raw
+                    .filter(c => c.is_active)
+                    .sort((a, b) => a.position - b.position)
+                    .map(c => ({
+                        id: c.id,
+                        title: c.title,
+                        subtitle: c.subtitle,
+                        image_url: c.image_url,
+                        image: c.image,
+                        link: c.link,
+                        link_type: c.link_type,
+                        backgroundColor: '#E8F5E9',
+                        textColor: '#FFFFFF',
+                    }));
+                return mapped;
+            } catch (error) {
+                console.error('Error fetching carousels:', error);
+                return [];
+            }
+        },
+    });
 
     // ── Load user name once on mount ───────────────────────────────────────────
 
@@ -792,125 +913,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         loadUserData();
     }, []);
 
-    // ── API: Categories ────────────────────────────────────────────────────────
-
-    const fetchCategories = useCallback(async () => {
-        setCategoriesLoading(true);
-        try {
-            const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
-            const response = await ApiManager.get<CategoryListModel>({
-                endpoint: constant.apiEndPoints.allCategories,
-                token: token || undefined,
-                showError: false,
-            });
-            const data: CategoryModel[] =
-                response?.data && Array.isArray(response.data) ? response.data : [];
-            const length = data.length;
-            console.log("length", length);
-            setCategories(data.slice(0, length));
-        } catch (error) {
-            console.error('Error fetching categories:', error);
-        } finally {
-            setCategoriesLoading(false);
-        }
-    }, []);
-
-    // ── API: Products (featured + category-wise) ───────────────────────────────
-
-    const fetchFeaturedProducts = useCallback(async () => {
-        setProductsLoading(true);
-        try {
-            const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
-            const response = await ApiManager.get<ProductListModel>({
-                endpoint: constant.apiEndPoints.allProducts,
-                token: token || undefined,
-                showError: false,
-            });
-
-            const raw: ProductModel[] =
-                response?.data && Array.isArray(response.data) ? response.data : [];
-
-            const transformed: ProductListProduct[] = raw.map(p => ({
-                id: p.id,
-                category_id: p.category_id,
-                name: p.name,
-                description: p.description,
-                price: p.price,
-                actual_price: p.actual_price,
-                stock: parseFloat(p.available_units) || 0,
-                unit_type: p.unit_type,
-                unit_value: p.unit_value,
-                image1: p.image1,
-                image2: p.image2,
-                image3: p.image3,
-                image4: p.image4,
-                image5: p.image5,
-                created_at: p.created_at,
-                updated_at: p.updated_at,
-                category: {
-                    id: p.category.id,
-                    name: p.category.name,
-                    description: p.category.description,
-                    image: p.category.image,
-                },
-            }));
-
-            const inStock = transformed.filter(p => p.stock > 0);
-
-            // Featured: first N in-stock items
-            setFeaturedProducts(inStock.slice(0, MAX_FEATURED_PRODUCTS));
-
-            // Category-wise: group ALL in-stock items
-            setCategoryProducts(groupProductsByCategory(inStock));
-        } catch (error) {
-            console.error('Error fetching featured products:', error);
-        } finally {
-            setProductsLoading(false);
-        }
-    }, []);
-
-    // ── API: Banner Carousels ──────────────────────────────────────────────────
-
-    const fetchCarousels = useCallback(async () => {
-        setCarouselsLoading(true);
-        try {
-            const token = await StorageManager.getItem(constant.shareInstanceKey.authToken);
-            const response = await ApiManager.get<CarouselItem[]>({
-                endpoint: '/api/carousels',
-                token: token || undefined,
-                showError: false,
-            });
-            const raw: CarouselItem[] =
-                response?.data && Array.isArray(response.data) ? response.data : [];
-            const mapped: Banner[] = raw
-                .filter(c => c.is_active)
-                .sort((a, b) => a.position - b.position)
-                .map(c => ({
-                    id: c.id,
-                    title: c.title,
-                    subtitle: c.subtitle,
-                    image_url: c.image_url,
-                    image: c.image,
-                    link: c.link,
-                    link_type: c.link_type,
-                    backgroundColor: '#E8F5E9',
-                    textColor: '#FFFFFF',
-                }));
-            setCarousels(mapped);
-        } catch (error) {
-            console.error('Error fetching carousels:', error);
-            setCarousels([]);
-        } finally {
-            setCarouselsLoading(false);
-        }
-    }, []);
-
     useFocusEffect(
         useCallback(() => {
-            fetchCategories();
-            fetchFeaturedProducts();
-            fetchCarousels();
-        }, [fetchCategories, fetchFeaturedProducts, fetchCarousels])
+            refetchCategories();
+            refetchProducts();
+            refetchCarousels();
+        }, [refetchCategories, refetchProducts, refetchCarousels])
     );
 
     // ── Navigation & interaction handlers ─────────────────────────────────────

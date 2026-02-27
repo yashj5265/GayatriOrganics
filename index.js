@@ -12,25 +12,30 @@ import { CartProvider } from './main/src/contexts/CardContext';
 import { AddressProvider } from './main/src/contexts/AddressContext';
 import { WishlistProvider } from './main/src/contexts/WishlistContext';
 import FlashMessage from 'react-native-flash-message';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const queryClient = new QueryClient();
 
 const MainApp = () => {
     return (
         <SafeAreaProvider>
-            <ThemeProvider>
-                <AuthProvider>
-                    <CartProvider>
-                        <AddressProvider>
-                            <WishlistProvider>
-                                <NavigationManager />
-                                <FlashMessage
-                                    position='top'
-                                    style={{ marginTop: Platform.OS === 'android' ? StatusBar.currentHeight : undefined }}
-                                />
-                            </WishlistProvider>
-                        </AddressProvider>
-                    </CartProvider>
-                </AuthProvider>
-            </ThemeProvider>
+            <QueryClientProvider client={queryClient}>
+                <ThemeProvider>
+                    <AuthProvider>
+                        <CartProvider>
+                            <AddressProvider>
+                                <WishlistProvider>
+                                    <NavigationManager />
+                                    <FlashMessage
+                                        position='top'
+                                        style={{ marginTop: Platform.OS === 'android' ? StatusBar.currentHeight : undefined }}
+                                    />
+                                </WishlistProvider>
+                            </AddressProvider>
+                        </CartProvider>
+                    </AuthProvider>
+                </ThemeProvider>
+            </QueryClientProvider>
         </SafeAreaProvider>
     );
 };
