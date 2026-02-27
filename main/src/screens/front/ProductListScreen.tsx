@@ -70,10 +70,11 @@ export interface Category {
 export interface Product {
     id: number;
     category_id: number;
+    product_type?: string;
     name: string;
     description: string;
     price: string;
-    actual_price?: string; // ★ ADDED
+    actual_price?: string;
     stock: number;
     unit_type?: string;
     unit_value?: number;
@@ -166,13 +167,14 @@ const extractProductsData = (response: ProductListModel | any): Product[] => {
         return {
             id: product.id,
             category_id: product.category_id,
+            product_type: product.product_type,
             name: product.name,
             description: product.description,
             price: product.price,
-            actual_price: product.actual_price, // ★ ADDED
+            actual_price: product.actual_price,
             stock: stock,
             unit_type: product.unit_type,
-            unit_value: product.unit_value, // ★ ADDED
+            unit_value: product.unit_value,
             image1: product.image1,
             image2: product.image2,
             image3: product.image3,

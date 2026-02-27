@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo, memo } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, FlatList, Alert,
-    TouchableOpacity, Image, ActivityIndicator, Linking,
+    TouchableOpacity, Image, ActivityIndicator, Linking, useWindowDimensions,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -36,6 +36,7 @@ import { CategoryModel, CategoryListModel, ProductModel, ProductListModel } from
 
 const MAX_CATEGORIES_DISPLAY = 8;
 const MAX_FEATURED_PRODUCTS = 6;
+const MAX_ORGANIC_PRODUCTS = 6;
 const MAX_PRODUCTS_PER_CATEGORY = 8;   // horizontal scroll cards per category row
 const VOICE_SEARCH_LANGUAGE = 'en-US';
 const VOICE_SEARCH_DISPLAY_LANGUAGE = 'English (United States)';
@@ -60,6 +61,7 @@ type CategoryProductMap = Record<number, ProductListProduct[]>;
 
 type ProductsQueryResult = {
     featured: ProductListProduct[];
+    organic: ProductListProduct[];
     categoryProducts: CategoryProductMap;
 };
 
@@ -341,6 +343,7 @@ const ProductCard = memo(({
     onPress, onAddToCart, onUpdateQuantity, onRemoveFromCart,
     onToggleFavorite, isFavorite = false,
 }: ProductCardProps) => {
+    const { width } = useWindowDimensions();
     const colors = useTheme();
     const imageUrl = product.image1 ? `${BASE_IMAGE_URL}${product.image1}` : null;
     const productStock = typeof product.stock === 'number' ? product.stock : 999;
@@ -351,9 +354,19 @@ const ProductCard = memo(({
         [product, onToggleFavorite]
     );
 
+    // Responsive width: 2 columns on phones, 3 on tablets
+    const isTablet = width >= 768;
+    const horizontalPadding = 40; // section paddingHorizontal * 2
+    const gap = 14;
+    const numColumns = isTablet ? 3 : 2;
+    const cardWidth = (width - horizontalPadding - gap * (numColumns - 1)) / numColumns;
+
     return (
         <TouchableOpacity
-            style={[styles.productCard, { backgroundColor: colors.backgroundSecondary }]}
+            style={[
+                styles.productCard,
+                { backgroundColor: colors.backgroundSecondary, width: cardWidth },
+            ]}
             onPress={() => onPress(product)}
             activeOpacity={0.85}
         >
@@ -575,10 +588,12 @@ const CategoriesSection = memo(({
 // ─────────────────────────────────────────────────────────────────────────────
 
 const FeaturedProductsSection = memo(({
+    title,
     products, loading, isInCart, getCartQuantity,
     onProductPress, onAddToCart, onUpdateQuantity, onRemoveFromCart,
     onToggleFavorite, isInWishlist, onViewAll,
 }: {
+    title: string;
     products: ProductListProduct[];
     loading: boolean;
     isInCart: (id: number) => boolean;
@@ -592,7 +607,7 @@ const FeaturedProductsSection = memo(({
     onViewAll: () => void;
 }) => (
     <View style={styles.section}>
-        <SectionHeader title="Featured Products" onViewAll={onViewAll} />
+        <SectionHeader title={title} onViewAll={onViewAll} />
         {loading ? (
             <LoadingState message="Loading products..." />
         ) : products.length > 0 ? (
@@ -646,24 +661,15 @@ const CategoryProductRow = memo(({
     const colors = useTheme();
 
     return (
-        <View style={styles.catRowSection}>
-
-            <View style={{ paddingRight: 20, paddingLeft: 10, marginLeft: 20, height: 30, justifyContent: 'center', borderLeftWidth: 4, borderLeftColor: colors.themePrimary }}>
-                <SectionHeader
-                    title={category.name}
-                    onViewAll={() => onViewAll(category)}
-                />
-            </View>
-
-            <FlatList
-                data={products}
-                keyExtractor={(item) => item.id.toString()}
-                numColumns={2}
-                scrollEnabled={false}
-                contentContainerStyle={styles.hProductsContainer}
-                columnWrapperStyle={{ gap: 12 }}
-                renderItem={({ item: product }) => (
-                    <HorizontalProductCard
+        <View style={[styles.section, styles.catRowSection]}>
+            <SectionHeader
+                title={category.name}
+                onViewAll={() => onViewAll(category)}
+            />
+            <View style={styles.productsGrid}>
+                {products.map(product => (
+                    <ProductCard
+                        key={product.id}
                         product={product}
                         isInCart={isInCart(product.id)}
                         cartQuantity={getCartQuantity(product.id)}
@@ -674,8 +680,8 @@ const CategoryProductRow = memo(({
                         onToggleFavorite={onToggleFavorite}
                         isFavorite={isInWishlist?.(product.id) ?? false}
                     />
-                )}
-            />
+                ))}
+            </View>
         </View>
     );
 });
@@ -817,10 +823,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
                 const raw: ProductModel[] =
                     response?.data && Array.isArray(response.data) ? response.data : [];
+                console.log('raw', raw);
 
                 const transformed: ProductListProduct[] = raw.map(p => ({
                     id: p.id,
                     category_id: p.category_id,
+                    product_type: p.product_type,
                     name: p.name,
                     description: p.description,
                     price: p.price,
@@ -844,19 +852,22 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 }));
 
                 const inStock = transformed.filter(p => p.stock > 0);
+                const organic = inStock.filter(p => p.product_type === 'organic');
 
                 return {
                     featured: inStock.slice(0, MAX_FEATURED_PRODUCTS),
+                    organic: organic.slice(0, MAX_ORGANIC_PRODUCTS),
                     categoryProducts: groupProductsByCategory(inStock),
                 };
             } catch (error) {
                 console.error('Error fetching featured products:', error);
-                return { featured: [], categoryProducts: {} };
+                return { featured: [], organic: [], categoryProducts: {} };
             }
         },
     });
 
     const featuredProducts = productsData?.featured ?? [];
+    const organicProducts = productsData?.organic ?? [];
     const categoryProducts = productsData?.categoryProducts ?? {};
 
     const {
@@ -1130,7 +1141,25 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                     onViewAll={handleViewAllCategories}
                 />
 
+                {organicProducts.length > 0 && (
+                    <FeaturedProductsSection
+                        title="Organic Products"
+                        products={organicProducts}
+                        loading={productsLoading}
+                        isInCart={isInCart}
+                        getCartQuantity={getCartQuantity}
+                        onProductPress={handleProductPress}
+                        onAddToCart={handleAddToCart}
+                        onUpdateQuantity={updateQuantity}
+                        onRemoveFromCart={removeFromCart}
+                        onToggleFavorite={handleToggleFavorite}
+                        isInWishlist={isInWishlist}
+                        onViewAll={handleViewAllProducts}
+                    />
+                )}
+
                 <FeaturedProductsSection
+                    title="Featured Products"
                     products={featuredProducts}
                     loading={productsLoading}
                     isInCart={isInCart}
@@ -1242,11 +1271,16 @@ const styles = StyleSheet.create({
     categoryName: { fontSize: fonts.size.font13, fontFamily: fonts.family.primaryMedium, textAlign: 'center', marginTop: 4 },
     categoryCount: { fontSize: fonts.size.font10, fontFamily: fonts.family.secondaryRegular, textAlign: 'center', marginTop: 2 },
 
-    // ── Products grid (featured) ───────────────────────────────────────────────
-    productsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
+    // ── Products grid (featured & category-wise) ───────────────────────────────
+    productsGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'flex-start',
+        gap: 14,
+    },
 
     // ── Product card (grid) ───────────────────────────────────────────────────
-    productCard: { width: '47%', padding: 14, borderRadius: 16, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 8 },
+    productCard: { padding: 14, borderRadius: 16, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 8 },
     productImageWrapper: { position: 'relative', marginBottom: 10 },
     productImage: { width: '100%', height: 118, borderRadius: 12, backgroundColor: '#f5f5f5' },
     productImagePlaceholder: { width: '100%', height: 118, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
