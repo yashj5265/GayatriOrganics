@@ -27,6 +27,7 @@ import MainContainer from '../../container/MainContainer';
 import { useTheme } from '../../contexts/ThemeProvider';
 import { useCart } from '../../contexts/CardContext';
 import { useWishlist } from '../../contexts/WishlistContext';
+import FloatingCartBar, { getFloatingCartBarReservedPadding } from '../../components/FloatingCartBar';
 import AppTouchableRipple from '../../components/AppTouchableRipple';
 import CartQuickAdjust from '../../components/CartQuickAdjust';
 import ApiManager from '../../managers/ApiManager';
@@ -1145,7 +1146,17 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
     const colors = useTheme();
     const insets = useSafeAreaInsets();
     const { productId } = route.params;
-    const { addToCart, isInCart, updateQuantity, getCartItem, removeFromCart } = useCart();
+    const {
+        addToCart,
+        isInCart,
+        updateQuantity,
+        getCartItem,
+        removeFromCart,
+        cartItems,
+        cartCount,
+        cartTotal,
+        clearCart,
+    } = useCart();
     const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
 
     const [product, setProduct] = useState<Product | null>(null);
@@ -1163,13 +1174,22 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
         return parseFloat(product.price) * qty;
     }, [product, quantity, inCart, getCartItem]);
 
+    const floatingBarPadding = useMemo(
+        () => getFloatingCartBarReservedPadding(insets),
+        [insets],
+    );
+
     const scrollContentStyle = useMemo(
         () => ({
             ...styles.scrollContent,
-            paddingBottom: 100 + insets.bottom,
+            paddingBottom: 100 + insets.bottom + (cartCount > 0 ? floatingBarPadding : 0),
         }),
-        [insets.bottom]
+        [insets.bottom, cartCount, floatingBarPadding]
     );
+
+    const navigateToCartScreen = useCallback(() => {
+        navigation.navigate(constant.routeName.cart);
+    }, [navigation]);
 
     const fetchProductDetail = useCallback(async () => {
         setLoading(true);
@@ -1252,13 +1272,12 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                 {
                     text: 'View Cart',
                     onPress: () =>
-                        navigation.navigate(constant.routeName.mainTabs, {
-                            screen: constant.routeName.cart,
-                        }),
+                        navigateToCartScreen()
                 },
-            ]);
+            ],
+            );
         }
-    }, [product, quantity, isInCart, updateQuantity, addToCart, navigation]);
+    }, [product, quantity, isInCart, updateQuantity, addToCart, navigateToCartScreen]);
 
     const handleQuantityChange = useCallback(
         (change: number) => {
@@ -1376,6 +1395,16 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                     onUpdateQuantity={updateQuantity}
                     onRemoveFromCart={removeFromCart}
                     maxQuantity={Math.min(product.stock, MAX_QUANTITY_PER_ITEM)}
+                />
+
+                <FloatingCartBar
+                    itemCount={cartCount}
+                    total={cartTotal}
+                    firstItemImage={cartItems[0]?.image}
+                    firstItemName={cartItems[0]?.name}
+                    onCheckout={navigateToCartScreen}
+                    onViewCart={navigateToCartScreen}
+                    onClearCart={clearCart}
                 />
             </View>
         </MainContainer>

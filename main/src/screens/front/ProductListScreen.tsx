@@ -8,6 +8,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import MainContainer from '../../container/MainContainer';
 import { useTheme } from '../../contexts/ThemeProvider';
 import { useCart } from '../../contexts/CardContext';
+import FloatingCartBar, { getFloatingCartBarReservedPadding } from '../../components/FloatingCartBar';
 import { useWishlist } from '../../contexts/WishlistContext';
 import AppTouchableRipple from '../../components/AppTouchableRipple';
 import EmptyData, { EmptyDataType } from '../../components/EmptyData';
@@ -382,7 +383,17 @@ const ProductListScreen: React.FC<ProductListScreenNavigationProps> = ({
 }) => {
     const colors = useTheme();
     const insets = useSafeAreaInsets();
-    const { addToCart, isInCart, getCartItem, updateQuantity, removeFromCart } = useCart();
+    const {
+        addToCart,
+        isInCart,
+        getCartItem,
+        updateQuantity,
+        removeFromCart,
+        cartItems,
+        cartCount,
+        cartTotal,
+        clearCart,
+    } = useCart();
     const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
     const searchInputRef = useRef<TextInput>(null);
     const scrollY = useRef(new Animated.Value(0)).current;
@@ -403,12 +414,17 @@ const ProductListScreen: React.FC<ProductListScreenNavigationProps> = ({
     // ============================================================================
     // COMPUTED VALUES
     // ============================================================================
+    const floatingBarPadding = useMemo(
+        () => getFloatingCartBarReservedPadding(insets),
+        [insets],
+    );
+
     const listContentStyle = useMemo(
         () => ({
             ...styles.listContainer,
-            paddingBottom: 100 + insets.bottom,
+            paddingBottom: cartCount > 0 ? floatingBarPadding : 100 + insets.bottom,
         }),
-        [insets.bottom]
+        [floatingBarPadding, cartCount, insets.bottom]
     );
 
     const showEmptyState = !loading && filteredProducts.length === 0;
@@ -779,6 +795,17 @@ const ProductListScreen: React.FC<ProductListScreenNavigationProps> = ({
                 language={VOICE_SEARCH_DISPLAY_LANGUAGE}
                 colors={colors}
                 onClose={stopListening}
+            />
+
+            {/* Floating Cart Bar – consistent with Home & CategoryDetail */}
+            <FloatingCartBar
+                itemCount={cartCount}
+                total={cartTotal}
+                firstItemImage={cartItems[0]?.image}
+                firstItemName={cartItems[0]?.name}
+                onCheckout={() => navigation.navigate(constant.routeName.cart)}
+                onViewCart={() => navigation.navigate(constant.routeName.cart)}
+                onClearCart={clearCart}
             />
         </MainContainer>
     );

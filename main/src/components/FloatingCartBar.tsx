@@ -122,10 +122,18 @@ const FloatingCartBar: React.FC<FloatingCartBarProps> = ({
                     </View>
                 )}
                 <View style={styles.leftText}>
-                    <Text style={[styles.cartLabel, { color: colors.textPrimary }]} numberOfLines={1}>
+                    <Text
+                        style={[styles.cartLabel, { color: colors.textPrimary }]}
+                        numberOfLines={1}
+                        allowFontScaling={false}
+                    >
                         {displayName}
                     </Text>
-                    <Text style={[styles.viewCartLink, { color: colors.themePrimary }]}>
+                    <Text
+                        style={[styles.viewCartLink, { color: colors.themePrimary }]}
+                        numberOfLines={1}
+                        allowFontScaling={false}
+                    >
                         View Cart
                     </Text>
                 </View>
@@ -136,7 +144,11 @@ const FloatingCartBar: React.FC<FloatingCartBarProps> = ({
                 onPress={onCheckout}
                 activeOpacity={0.85}
             >
-                <Text style={[styles.checkoutText, { color: colors.white }]}>
+                <Text
+                    style={[styles.checkoutText, { color: colors.white }]}
+                    numberOfLines={1}
+                    allowFontScaling={false}
+                >
                     {itemCount} {itemCount === 1 ? 'item' : 'items'} · ₹{total.toFixed(0)} Checkout
                 </Text>
             </TouchableOpacity>

@@ -101,10 +101,16 @@ const CartHeader = memo(({
         <View style={[styles.header, { backgroundColor: colors.themePrimary }]}>
             <View style={styles.headerContent}>
                 <View>
-                    <Text style={[styles.headerTitle, { color: colors.white }]}>
+                    <Text
+                        style={[styles.headerTitle, { color: colors.white }]}
+                        allowFontScaling={false}
+                    >
                         My Cart
                     </Text>
-                    <Text style={[styles.headerSubtitle, { color: colors.white }]}>
+                    <Text
+                        style={[styles.headerSubtitle, { color: colors.white }]}
+                        allowFontScaling={false}
+                    >
                         {cartCount} {getItemWord(cartCount)}
                     </Text>
                 </View>
@@ -115,7 +121,10 @@ const CartHeader = memo(({
                         onPress={onClearCart}
                     >
                         <Icon name="delete-outline" size={20} color={colors.white} />
-                        <Text style={[styles.clearButtonText, { color: colors.white }]}>
+                        <Text
+                            style={[styles.clearButtonText, { color: colors.white }]}
+                            allowFontScaling={false}
+                        >
                             Clear
                         </Text>
                     </AppTouchableRipple>
@@ -131,10 +140,16 @@ const EmptyCartView = memo(({ onShopNow }: { onShopNow: () => void }) => {
     return (
         <>
             <View style={[styles.header, { backgroundColor: colors.themePrimary }]}>
-                <Text style={[styles.headerTitle, { color: colors.white }]}>
+                <Text
+                    style={[styles.headerTitle, { color: colors.white }]}
+                    allowFontScaling={false}
+                >
                     My Cart
                 </Text>
-                <Text style={[styles.headerSubtitle, { color: colors.white }]}>
+                <Text
+                    style={[styles.headerSubtitle, { color: colors.white }]}
+                    allowFontScaling={false}
+                >
                     0 items
                 </Text>
             </View>
@@ -151,7 +166,10 @@ const EmptyCartView = memo(({ onShopNow }: { onShopNow: () => void }) => {
                     onPress={onShopNow}
                 >
                     <Icon name="shopping" size={25} color={colors.white} />
-                    <Text style={[styles.shopNowText, { color: colors.white }]}>
+                    <Text
+                        style={[styles.shopNowText, { color: colors.white }]}
+                        allowFontScaling={false}
+                    >
                         Start Shopping
                     </Text>
                 </AppTouchableRipple>
@@ -186,7 +204,10 @@ const QuantityControls = memo(({
                 <Icon name="minus" size={16} color={colors.themePrimary} />
             </AppTouchableRipple>
 
-            <Text style={[styles.quantityText, { color: colors.textPrimary }]}>
+            <Text
+                style={[styles.quantityText, { color: colors.textPrimary }]}
+                allowFontScaling={false}
+            >
                 {quantity}
             </Text>
 
@@ -288,7 +309,10 @@ const CartItemCard = memo(({
             {/* Item Right - Price & Remove */}
             <View style={styles.itemRight}>
                 <View style={styles.totalPriceContainer}>
-                    <Text style={[styles.itemTotal, { color: colors.themePrimary }]}>
+                <Text
+                    style={[styles.itemTotal, { color: colors.themePrimary }]}
+                    allowFontScaling={false}
+                >
                         ₹{itemTotal.toFixed(2)}
                     </Text>
                     {hasPackaging && (
@@ -438,13 +462,22 @@ const CheckoutFooter = memo(({
             ]}
         >
             <View>
-                <Text style={[styles.footerLabel, { color: colors.textLabel }]}>
+                <Text
+                    style={[styles.footerLabel, { color: colors.textLabel }]}
+                    allowFontScaling={false}
+                >
                     Total Amount
                 </Text>
-                <Text style={[styles.footerTotal, { color: colors.themePrimary }]}>
+                <Text
+                    style={[styles.footerTotal, { color: colors.themePrimary }]}
+                    allowFontScaling={false}
+                >
                     {formatCurrency(total)}
                 </Text>
-                <Text style={[styles.footerSubtext, { color: colors.textLabel }]}>
+                <Text
+                    style={[styles.footerSubtext, { color: colors.textLabel }]}
+                    allowFontScaling={false}
+                >
                     Including all taxes
                 </Text>
             </View>
@@ -453,7 +486,10 @@ const CheckoutFooter = memo(({
                 style={[styles.checkoutButton, { backgroundColor: colors.themePrimary }]}
                 onPress={onCheckout}
             >
-                <Text style={[styles.checkoutText, { color: colors.white }]}>
+                <Text
+                    style={[styles.checkoutText, { color: colors.white }]}
+                    allowFontScaling={false}
+                >
                     Proceed to Checkout
                 </Text>
                 <Icon name="arrow-right" size={20} color={colors.white} />

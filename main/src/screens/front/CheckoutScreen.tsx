@@ -100,7 +100,10 @@ const CheckoutHeader = memo(({ onBack }: { onBack: () => void }) => {
             <AppTouchableRipple style={styles.backButton} onPress={onBack}>
                 <Icon name="arrow-left" size={24} color={colors.white} />
             </AppTouchableRipple>
-            <Text style={[styles.headerTitle, { color: colors.white }]}>
+            <Text
+                style={[styles.headerTitle, { color: colors.white }]}
+                allowFontScaling={false}
+            >
                 Checkout
             </Text>
             <View style={styles.headerRight} />
@@ -114,7 +117,10 @@ const SectionHeader = memo(({ icon, title }: { icon: string; title: string }) =>
     return (
         <View style={styles.sectionHeader}>
             <Icon name={icon} size={20} color={colors.themePrimary} />
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                <Text
+                    style={[styles.sectionTitle, { color: colors.textPrimary }]}
+                    allowFontScaling={false}
+                >
                 {title}
             </Text>
         </View>
@@ -257,7 +263,10 @@ const AddressSection = memo(({
                         onPress={onManageAddresses}
                     >
                         <Icon name="pencil" size={18} color={colors.themePrimary} />
-                        <Text style={[styles.manageAddressText, { color: colors.themePrimary }]}>
+                    <Text
+                        style={[styles.manageAddressText, { color: colors.themePrimary }]}
+                        allowFontScaling={false}
+                    >
                             Manage Addresses
                         </Text>
                     </AppTouchableRipple>
@@ -316,7 +325,10 @@ const DeliveryInfo = memo(() => {
         <View style={[styles.infoCard, { backgroundColor: colors.backgroundSecondary }]}>
             <Icon name="information" size={20} color={colors.themePrimary} />
             <View style={styles.infoContent}>
-                <Text style={[styles.infoTitle, { color: colors.textPrimary }]}>
+                <Text
+                    style={[styles.infoTitle, { color: colors.textPrimary }]}
+                    allowFontScaling={false}
+                >
                     Delivery Information
                 </Text>
                 <Text style={[styles.infoText, { color: colors.textDescription }]}>
@@ -410,10 +422,16 @@ const CheckoutFooter = memo(({
             ]}
         >
             <View>
-                <Text style={[styles.footerLabel, { color: colors.textLabel }]}>
+                <Text
+                    style={[styles.footerLabel, { color: colors.textLabel }]}
+                    allowFontScaling={false}
+                >
                     Total Amount
                 </Text>
-                <Text style={[styles.footerTotal, { color: colors.themePrimary }]}>
+                <Text
+                    style={[styles.footerTotal, { color: colors.themePrimary }]}
+                    allowFontScaling={false}
+                >
                     {formatCurrency(total)}
                 </Text>
             </View>
@@ -432,7 +450,10 @@ const CheckoutFooter = memo(({
                     <ActivityIndicator color={colors.white} />
                 ) : (
                     <>
-                        <Text style={[styles.placeOrderText, { color: colors.white }]}>
+                        <Text
+                            style={[styles.placeOrderText, { color: colors.white }]}
+                            allowFontScaling={false}
+                        >
                             Place Order
                         </Text>
                         <Icon name="arrow-right" size={20} color={colors.white} />

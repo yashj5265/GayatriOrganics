@@ -174,6 +174,12 @@ const FrontNavigation: React.FC = React.memo(() => {
                 component={BottomTabs}
             />
 
+            {/* Standalone Cart screen in stack so we can navigate directly */}
+            <Stack.Screen
+                name={constant.routeName.cart}
+                component={CartScreen as any}
+            />
+
             <Stack.Screen
                 name={constant.routeName.categoryDetail}
                 component={CategoryDetailScreen as any}

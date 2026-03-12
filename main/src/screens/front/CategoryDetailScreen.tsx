@@ -20,6 +20,7 @@ import { ProductGridItem, ProductListItem } from '../../listItems';
 import { useTheme } from '../../contexts/ThemeProvider';
 import { useCart } from '../../contexts/CardContext';
 import { useWishlist } from '../../contexts/WishlistContext';
+import FloatingCartBar, { getFloatingCartBarReservedPadding } from '../../components/FloatingCartBar';
 import { useVoiceSearch } from '../../hooks/useVoiceSearch';
 
 import ApiManager from '../../managers/ApiManager';
@@ -667,7 +668,17 @@ const CategoryDetailScreen: React.FC<CategoryDetailScreenNavigationProps> = ({
 
     const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
-    const { addToCart, isInCart, getCartItem, updateQuantity, removeFromCart } = useCart();
+    const {
+        addToCart,
+        isInCart,
+        getCartItem,
+        updateQuantity,
+        removeFromCart,
+        cartItems,
+        cartCount,
+        cartTotal,
+        clearCart,
+    } = useCart();
     const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
 
     // Data hooks
@@ -793,10 +804,23 @@ const CategoryDetailScreen: React.FC<CategoryDetailScreenNavigationProps> = ({
     // ── Styles ─────────────────────────────────────────────────────────────────
 
     const styles = useMemo(() => createMainStyles(colors), [colors]);
-    const scrollContentStyle = useMemo(
-        () => ({ ...styles.scrollContent, paddingBottom: 32 + insets.bottom }),
-        [styles.scrollContent, insets.bottom]
+
+    const floatingBarPadding = useMemo(
+        () => getFloatingCartBarReservedPadding(insets),
+        [insets],
     );
+
+    const scrollContentStyle = useMemo(
+        () => ({
+            ...styles.scrollContent,
+            paddingBottom: 32 + insets.bottom + (cartCount > 0 ? floatingBarPadding : 0),
+        }),
+        [styles.scrollContent, insets.bottom, cartCount, floatingBarPadding]
+    );
+
+    const navigateToCartScreen = useCallback(() => {
+        navigation.navigate(constant.routeName.cart);
+    }, [navigation]);
 
     // ── Loading state ──────────────────────────────────────────────────────────
 
@@ -887,6 +911,16 @@ const CategoryDetailScreen: React.FC<CategoryDetailScreenNavigationProps> = ({
                 language="English (United States)"
                 colors={colors}
                 onClose={stopListening}
+            />
+
+            <FloatingCartBar
+                itemCount={cartCount}
+                total={cartTotal}
+                firstItemImage={cartItems[0]?.image}
+                firstItemName={cartItems[0]?.name}
+                onCheckout={navigateToCartScreen}
+                onViewCart={navigateToCartScreen}
+                onClearCart={clearCart}
             />
         </MainContainer>
     );

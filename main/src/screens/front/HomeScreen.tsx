@@ -37,7 +37,8 @@ import { CategoryModel, CategoryListModel, ProductModel, ProductListModel } from
 const MAX_CATEGORIES_DISPLAY = 8;
 const MAX_FEATURED_PRODUCTS = 6;
 const MAX_ORGANIC_PRODUCTS = 6;
-const MAX_PRODUCTS_PER_CATEGORY = 8;   // horizontal scroll cards per category row
+// Maximum number of products to show per category section
+const MAX_PRODUCTS_PER_CATEGORY = 6;
 const VOICE_SEARCH_LANGUAGE = 'en-US';
 const VOICE_SEARCH_DISPLAY_LANGUAGE = 'English (United States)';
 const BASE_IMAGE_URL = 'https://gayatriorganicfarm.com/storage/';
