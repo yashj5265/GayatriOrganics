@@ -1,4 +1,4 @@
-package com.gayatriorganics
+package com.gayatriorganics.user
 
 import android.app.Application
 import com.facebook.react.PackageList

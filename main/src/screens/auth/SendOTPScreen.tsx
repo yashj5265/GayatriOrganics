@@ -6,6 +6,7 @@ import {
     Alert,
     Platform,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import AppTextInput from '../../components/AppTextInput';
 import { useTheme } from '../../contexts/ThemeProvider';
@@ -24,9 +25,29 @@ interface SendOTPResponse {
     success: boolean;
     message?: string;
     mobile?: string;
-    otp?: number;
     expires_in?: string;
 }
+
+const DEVICE_ID_STORAGE_KEY = '@GOFManager:device_id';
+
+const generateDeviceId = (): string => {
+    const randomPart = Math.random().toString(36).slice(2, 10);
+    return `${Platform.OS.toUpperCase()}_${Date.now()}_${randomPart}`;
+};
+
+const getOrCreateDeviceId = async (): Promise<string> => {
+    try {
+        const existing = await AsyncStorage.getItem(DEVICE_ID_STORAGE_KEY);
+        if (existing && existing.trim().length > 0) return existing;
+
+        const deviceId = generateDeviceId();
+        await AsyncStorage.setItem(DEVICE_ID_STORAGE_KEY, deviceId);
+        return deviceId;
+    } catch (error) {
+        console.error('Error getting device id:', error);
+        return generateDeviceId();
+    }
+};
 
 const SendOTPScreen: React.FC<Props> = ({ navigation }) => {
     const [mobile, setMobile] = useState<string>('');
@@ -53,25 +74,26 @@ const SendOTPScreen: React.FC<Props> = ({ navigation }) => {
         setLoading(true);
 
         try {
+            const deviceId = await getOrCreateDeviceId();
             const response: SendOTPResponse = await ApiManager.post({
                 endpoint: constant.apiEndPoints.sendOTP,
                 params: {
                     mobile: mobile.trim(),
+                    device_id: deviceId,
                 },
             });
-
+            console.log("response", response);
             // Check if response has message (indicating success)
             if (response?.message) {
                 Alert.alert(
                     'Success',
-                    `${response.message}${response.otp ? `\n\nDemo OTP: ${response.otp}` : ''}`,
+                    response.message,
                     [
                         {
                             text: 'OK',
                             onPress: () => {
                                 navigation.navigate(constant.routeName.verifyOTPScreen, {
                                     mobile: mobile,
-                                    demoOTP: response.otp || null,
                                 });
                             }
                         }

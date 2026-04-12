@@ -92,13 +92,14 @@ export default {
         serverError: 500,
     },
     webPages: {
-        termsOfService: "https://www.google.com",
-        privacyPolicy: "https://www.facebook.com",
+        termsOfService: "https://gayatriorganics.com/terms.html",
+        privacyPolicy: "https://gayatriorganics.com/privacy-policy.html",
         aboutUs: "https://gayatriorganics.com/aboutUs.html",
         downloadUrl: "https://www.gayatriorganics.com",
-        appPlayStoreUrl: "https://play.google.com/store/apps/details?id=com.gayatriorganics",
+        appPlayStoreUrl:
+            "https://play.google.com/store/apps/details?id=com.gayatriorganics.user",
         appleAppStoreUrl: "https://apps.apple.com",
-        reviewAndroidUrl: "market://details?id=com.gayatriorganics",
+        reviewAndroidUrl: "market://details?id=com.gayatriorganics.user",
         reviewiOSUrl: "itms-apps://itunes.apple.com/app/idYOUR_APP_ID?action=write-review",
     },
     appIdentity: "Gayatri Organic Farm",

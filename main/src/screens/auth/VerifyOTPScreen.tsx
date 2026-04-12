@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, Alert, Platform, TouchableOpacity } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import AppTextInput from '../../components/AppTextInput';
 import { useTheme } from '../../contexts/ThemeProvider';
@@ -16,7 +17,6 @@ type AuthStackParamList = {
     [constant.routeName.sendOTPScreen]: undefined;
     [constant.routeName.verifyOTPScreen]: {
         mobile: string;
-        demoOTP?: number;
     };
 };
 
@@ -29,7 +29,6 @@ type VerifyOTPScreenRouteProp = RouteProp<
     {
         [constant.routeName.verifyOTPScreen]: {
             mobile: string;
-            demoOTP?: number;
         };
     },
     typeof constant.routeName.verifyOTPScreen
@@ -51,8 +50,33 @@ interface VerifyOTPResponse {
     };
 }
 
+const DEVICE_ID_STORAGE_KEY = '@GOFManager:device_id';
+
+const generateDeviceId = (): string => {
+    const randomPart = Math.random().toString(36).slice(2, 10);
+    return `${Platform.OS.toUpperCase()}_${Date.now()}_${randomPart}`;
+};
+
+const getOrCreateDeviceId = async (): Promise<string> => {
+    try {
+        const existing = await AsyncStorage.getItem(DEVICE_ID_STORAGE_KEY);
+        if (existing && existing.trim().length > 0) return existing;
+
+        const deviceId = generateDeviceId();
+        await AsyncStorage.setItem(DEVICE_ID_STORAGE_KEY, deviceId);
+        return deviceId;
+    } catch (error) {
+        console.error('Error getting device id:', error);
+        return generateDeviceId();
+    }
+};
+
+const getDeviceName = (): string => {
+    return `${Platform.OS.toUpperCase()} ${String(Platform.Version)}`;
+};
+
 const VerifyOTPScreen: React.FC<VerifyOTPScreenProps> = ({ navigation, route }) => {
-    const { mobile, demoOTP } = route.params;
+    const { mobile } = route.params;
     const [otp, setOtp] = useState<string>('');
     const [loading, setLoading] = useState<boolean>(false);
     const [timer, setTimer] = useState<number>(300); // 5 minutes in seconds
@@ -148,13 +172,17 @@ const VerifyOTPScreen: React.FC<VerifyOTPScreenProps> = ({ navigation, route }) 
 
         try {
             setLoading(true);
+            const deviceId = await getOrCreateDeviceId();
+            const deviceName = getDeviceName();
 
             const response: VerifyOTPResponse = await ApiManager.post({
                 endpoint: constant.apiEndPoints.verifyOTP,
                 params: {
                     mobile: mobile,
                     otp: otp,
-                },
+                    device_id: deviceId,
+                    device_name: deviceName,
+                }
             });
 
             if (response?.token) {
@@ -202,7 +230,7 @@ const VerifyOTPScreen: React.FC<VerifyOTPScreenProps> = ({ navigation, route }) 
             if (response?.success) {
                 Alert.alert(
                     'Success',
-                    `OTP resent successfully${response.otp ? `\n\nDemo OTP: ${response.otp}` : ''}`
+                    'OTP resent successfully'
                 );
             }
         } catch (error) {
@@ -283,18 +311,6 @@ const VerifyOTPScreen: React.FC<VerifyOTPScreenProps> = ({ navigation, route }) 
                         </View>
                     </View>
 
-                    {/* Demo OTP Display (for testing) */}
-                    {demoOTP && (
-                        <View style={[styles.demoOTPContainer, { backgroundColor: colors.themePrimaryLight }]}>
-                            <Text style={[styles.demoOTPLabel, { color: colors.textLabel }]}>
-                                Demo OTP (for testing):
-                            </Text>
-                            <Text style={[styles.demoOTPValue, { color: colors.themePrimary }]}>
-                                {demoOTP}
-                            </Text>
-                        </View>
-                    )}
-
                     {/* Verify Button */}
                     <AppTouchableRipple
                         style={{
@@ -374,22 +390,6 @@ const styles = StyleSheet.create({
     resendText: {
         fontSize: fonts.size.font14,
         fontFamily: fonts.family.primaryBold,
-    },
-    demoOTPContainer: {
-        padding: 16,
-        borderRadius: 12,
-        marginBottom: 20,
-        alignItems: 'center',
-    },
-    demoOTPLabel: {
-        fontSize: fonts.size.font12,
-        fontFamily: fonts.family.secondaryRegular,
-        marginBottom: 4,
-    },
-    demoOTPValue: {
-        fontSize: fonts.size.font24,
-        fontFamily: fonts.family.primaryBold,
-        letterSpacing: 4,
     },
     button: {
         paddingVertical: 16,

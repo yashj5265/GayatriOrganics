@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
-    SafeAreaView,
     View,
     StyleSheet,
     ViewStyle,
     StatusBar,
     ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { useTheme } from '../contexts/ThemeProvider';
 import EmptyData, { EmptyDataType } from '../components/EmptyData';
