@@ -27,7 +27,10 @@ import MainContainer from '../../container/MainContainer';
 import { useTheme } from '../../contexts/ThemeProvider';
 import { useCart } from '../../contexts/CardContext';
 import { useWishlist } from '../../contexts/WishlistContext';
-import FloatingCartBar, { getFloatingCartBarReservedPadding } from '../../components/FloatingCartBar';
+import FloatingCartBar, {
+    FLOATING_BAR_ABOVE_FOOTER_GAP,
+    FLOATING_BAR_HEIGHT,
+} from '../../components/FloatingCartBar';
 import AppTouchableRipple from '../../components/AppTouchableRipple';
 import CartQuickAdjust from '../../components/CartQuickAdjust';
 import ApiManager from '../../managers/ApiManager';
@@ -1122,6 +1125,9 @@ const BottomActionBar = memo(({
 
 BottomActionBar.displayName = 'BottomActionBar';
 
+/** Visual height of `BottomActionBar` (padding 20×2 + price row / quick-adjust). Keeps `FloatingCartBar` stacked above it. */
+const PRODUCT_DETAIL_BOTTOM_BAR_HEIGHT = 112;
+
 const LoadingState = memo(() => {
     const colors = useTheme();
 
@@ -1174,17 +1180,20 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
         return parseFloat(product.price) * qty;
     }, [product, quantity, inCart, getCartItem]);
 
-    const floatingBarPadding = useMemo(
-        () => getFloatingCartBarReservedPadding(insets),
-        [insets],
-    );
-
     const scrollContentStyle = useMemo(
         () => ({
             ...styles.scrollContent,
-            paddingBottom: 100 + insets.bottom + (cartCount > 0 ? floatingBarPadding : 0),
+            paddingBottom:
+                100 +
+                insets.bottom +
+                (cartCount > 0 ? FLOATING_BAR_HEIGHT + FLOATING_BAR_ABOVE_FOOTER_GAP + 8 : 0),
         }),
-        [insets.bottom, cartCount, floatingBarPadding]
+        [insets.bottom, cartCount]
+    );
+
+    const floatingCartBarBottom = useMemo(
+        () => insets.bottom + PRODUCT_DETAIL_BOTTOM_BAR_HEIGHT + FLOATING_BAR_ABOVE_FOOTER_GAP,
+        [insets.bottom]
     );
 
     const navigateToCartScreen = useCallback(() => {
@@ -1385,6 +1394,17 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                     </View>
                 </ScrollView>
 
+                <FloatingCartBar
+                    itemCount={cartCount}
+                    total={cartTotal}
+                    firstItemImage={cartItems[0]?.image}
+                    firstItemName={cartItems[0]?.name}
+                    onCheckout={navigateToCartScreen}
+                    onViewCart={navigateToCartScreen}
+                    onClearCart={clearCart}
+                    absoluteBottom={floatingCartBarBottom}
+                />
+
                 <BottomActionBar
                     totalPrice={totalPrice}
                     inCart={inCart}
@@ -1395,16 +1415,6 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                     onUpdateQuantity={updateQuantity}
                     onRemoveFromCart={removeFromCart}
                     maxQuantity={Math.min(product.stock, MAX_QUANTITY_PER_ITEM)}
-                />
-
-                <FloatingCartBar
-                    itemCount={cartCount}
-                    total={cartTotal}
-                    firstItemImage={cartItems[0]?.image}
-                    firstItemName={cartItems[0]?.name}
-                    onCheckout={navigateToCartScreen}
-                    onViewCart={navigateToCartScreen}
-                    onClearCart={clearCart}
                 />
             </View>
         </MainContainer>

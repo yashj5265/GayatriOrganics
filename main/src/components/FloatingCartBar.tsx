@@ -19,7 +19,9 @@ import fonts from '../styles/fonts';
 const BASE_IMAGE_URL = 'https://gayatriorganicfarm.com/storage/';
 
 /** Approximate height of the floating bar (padding + content) */
-const FLOATING_BAR_HEIGHT = 64;
+export const FLOATING_BAR_HEIGHT = 64;
+/** Gap between floating bar and a footer stacked below it (e.g. product detail action bar) */
+export const FLOATING_BAR_ABOVE_FOOTER_GAP = 12;
 /** Gap between bar and tab bar (visible space in px) */
 const BAR_TO_TAB_GAP = 10;
 /** Subtract from tab bar height when positioning (fixes extra gap on some devices) */
@@ -48,6 +50,11 @@ export interface FloatingCartBarProps {
     onCheckout: () => void;
     onViewCart: () => void;
     onClearCart: () => void;
+    /**
+     * When set, positions the bar this many px from the container bottom (overrides tab-bar offset).
+     * Use on stack screens with a bottom footer so the bar sits above it.
+     */
+    absoluteBottom?: number;
 }
 
 const FloatingCartBar: React.FC<FloatingCartBarProps> = ({
@@ -58,6 +65,7 @@ const FloatingCartBar: React.FC<FloatingCartBarProps> = ({
     onCheckout,
     onViewCart,
     onClearCart,
+    absoluteBottom,
 }) => {
     const colors = useTheme();
     const insets = useSafeAreaInsets();
@@ -73,6 +81,8 @@ const FloatingCartBar: React.FC<FloatingCartBarProps> = ({
         () => Math.max(0, getTabBarHeight(insets) - TAB_BAR_POSITION_OFFSET) + BAR_TO_TAB_GAP,
         [insets]
     );
+
+    const resolvedBottom = absoluteBottom ?? barBottomOffset;
 
     const handleClearPress = useCallback(() => {
         Alert.alert(
@@ -98,7 +108,7 @@ const FloatingCartBar: React.FC<FloatingCartBarProps> = ({
             style={[
                 styles.wrapper,
                 {
-                    bottom: barBottomOffset,
+                    bottom: resolvedBottom,
                     backgroundColor: colors.backgroundPrimary,
                     borderColor: colors.border,
                     shadowColor: '#000',
