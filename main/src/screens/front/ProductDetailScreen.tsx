@@ -832,7 +832,8 @@ const PriceSection = memo(({
     maxStock,
     unitTypeInfo,
     unitValue,
-    onQuantityChange
+    onQuantityChange,
+    inCart,
 }: {
     price: string;
     actualPrice?: string;
@@ -841,6 +842,8 @@ const PriceSection = memo(({
     unitTypeInfo: UnitTypeInfo;
     unitValue?: number;
     onQuantityChange: (change: number) => void;
+    /** When true, quantity is adjusted from the bottom bar only. */
+    inCart: boolean;
 }) => {
     const colors = useTheme();
     const hasPackaging = unitValue && unitValue > 1;
@@ -886,11 +889,13 @@ const PriceSection = memo(({
                 )}
             </View>
 
-            <QuantitySelector
-                quantity={quantity}
-                maxStock={maxStock}
-                onQuantityChange={onQuantityChange}
-            />
+            {!inCart && (
+                <QuantitySelector
+                    quantity={quantity}
+                    maxStock={maxStock}
+                    onQuantityChange={onQuantityChange}
+                />
+            )}
         </View>
     );
 });
@@ -1385,6 +1390,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenNavigationProps> = ({ nav
                             unitTypeInfo={unitTypeInfo}
                             unitValue={product.unit_value}
                             onQuantityChange={handleQuantityChange}
+                            inCart={inCart}
                         />
 
                         <TotalPriceCard totalPrice={totalPrice} />

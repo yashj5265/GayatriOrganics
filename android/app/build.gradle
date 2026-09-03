@@ -65,6 +65,14 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
 
+def isReleaseTask = gradle.startParameter.taskNames.any { taskName ->
+    taskName.toLowerCase().contains("release")
+}
+
+if (isReleaseTask && !keystorePropertiesFile.exists()) {
+    throw new GradleException("Release build requires android/keystore.properties with upload keystore credentials.")
+}
+
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
  *
@@ -88,8 +96,7 @@ android {
         applicationId "com.gayatriorganics.user"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0.0"
+        versionCode 4
         manifestPlaceholders = [usesCleartextTraffic: "false"]
     }
     signingConfigs {
@@ -114,7 +121,7 @@ android {
             manifestPlaceholders = [usesCleartextTraffic: "true"]
         }
         release {
-            signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
+            signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
             shrinkResources enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"

@@ -103,4 +103,6 @@ export default {
         reviewiOSUrl: "itms-apps://itunes.apple.com/app/idYOUR_APP_ID?action=write-review",
     },
     appIdentity: "Gayatri Organic Farm",
+    /** Minimum launcher/splash visibility (ms). Typical branded splash: 2–3s. */
+    splashMinDurationMs: 3000,
 }

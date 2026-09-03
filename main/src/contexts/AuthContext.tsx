@@ -37,6 +37,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     useEffect(() => {
         const bootstrapAuth = async () => {
+            const startedAt = Date.now();
             try {
                 await StorageManager.sync();
                 const token = await StorageManager.getItem<string>(constant.shareInstanceKey.authToken);
@@ -49,6 +50,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 setIsLoggedIn(false);
                 setUser(null);
             } finally {
+                const elapsed = Date.now() - startedAt;
+                const remaining = constant.splashMinDurationMs - elapsed;
+                if (remaining > 0) {
+                    await new Promise<void>((resolve) => setTimeout(resolve, remaining));
+                }
                 setIsLoading(false);
             }
         };
